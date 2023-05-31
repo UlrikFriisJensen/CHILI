@@ -2,7 +2,6 @@
 
 # Standard imports
 from pathlib import Path
-import zipfile
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 import numpy as np
@@ -14,7 +13,7 @@ from ase.io import read
 
 # Pytorch imports
 import torch
-from torch_geometric.data import Dataset, Data, download_url
+from torch_geometric.data import Dataset, Data, download_url, extract_zip
 from torch_geometric.utils import to_networkx
 from networkx.algorithms.components import is_connected
 
@@ -37,14 +36,12 @@ class InOrgMatDatasets(Dataset):
     def download(self):
         # Download to `self.raw_dir`.
         path = download_url(f'https://sid.erda.dk/share_redirect/HiFeydCIqA/{self.dataset}.zip', self.raw_dir)
+        extract_zip(path, self.raw_dir)
+        Path(path).unlink()
 
-    def process(self):
-        for raw_path in self.raw_paths:
-            with zipfile.ZipFile(raw_path, 'r') as zip_ref:
-                zip_ref.extractall(self.raw_dir)
-            
+    def process(self):            
         train_files = sorted([str(x.name) for x in Path(self.raw_dir + '/Train/').glob('*.cif')])
-        print(train_files)
+        # print(train_files)
         
         # TODO: Construct graphs
         # TODO: Calculate spectra
@@ -52,10 +49,10 @@ class InOrgMatDatasets(Dataset):
         # TODO: Save in a format that is easy to load using DataLoader
         
         val_files = sorted([str(x.name) for x in Path(self.raw_dir + '/Val/').glob('*.cif')])
-        print(val_files)
+        # print(val_files)
         
         test_files = sorted([str(x.name) for x in Path(self.raw_dir + '/Test/').glob('*.cif')])
-        print(test_files)
+        # print(test_files)
             # # Read data from `raw_path`.
             # data = Data(...)
 
