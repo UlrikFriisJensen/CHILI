@@ -16,10 +16,12 @@ from torch_geometric.utils import to_networkx
 from networkx.algorithms.components import is_connected
 from networkx import draw
 from ase.io import write, read
+from ase.build import make_supercell
+from ase.neighborlist import neighbor_list, natural_cutoffs
 
 #%% Graph construction
 
-class graphConstructor():
+class h5Constructor():
     def __init__(self, cif_dir, save_dir):
         self.cif_dir = Path(cif_dir)
         self.save_dir = Path(save_dir)
@@ -36,16 +38,19 @@ class graphConstructor():
         self.cif_dir = str(self.cif_dir)
         self.save_dir = str(self.save_dir)
 
-    def gen_single_graph(self, cif):
+    def gen_single_h5(self, cif):
+        # Check if graph has already been made
         if os.path.isfile(f'{self.save_dir}/graph_{cif[:-4]}.h5'):
             return None
         
+        # Load in cif file
+        unit_cell = read(f'{self.cif_dir}/{cif}')
+        
+        # Construct graph
         node_matrix = []
         edge_index1 = []
         edge_index2 = []
         edge_features = []
-        
-        unit_cell = read(f'{self.cif_dir}/{cif}')
         
         n_atoms = len(unit_cell)
         # positions_real = unit_cell.get_positions()
@@ -53,16 +58,22 @@ class graphConstructor():
         # position_scale = np.diag(unit_cell.get_cell())
         atomic_number_matrix = unit_cell.get_atomic_numbers()
         
-        metal_distances = unit_cell[atomic_number_matrix != 8].get_all_distances()
+        metal_distances = make_supercell(unit_cell, np.diag([2,2,2])).get_all_distances()
         lc = np.amin(metal_distances[metal_distances > 0.]) 
         
+        # try:
+        #     metal_distances = unit_cell[atomic_number_matrix != 8].get_all_distances()
+        #     lc = np.amin(metal_distances[metal_distances > 0.]) 
+        # except:
+        #     metal_distances = make_supercell(unit_cell, np.diag([2,2,2])).get_all_distances()
+        #     lc = np.amin(metal_distances[metal_distances > 0.]) 
         for i in range(n_atoms):
             for j in range(i,n_atoms):
                 if i == j: 
                     continue
                 else:
-                    dist = unit_cell.get_distance(i, j)
-
+                    dist = unit_cell.get_distance(i, j, mic=True) # TODO: Ensure periodic graph edges are actually created
+                    print(dist)
                 if (dist < lc):
                     edge_index1.append(i)
                     edge_index2.append(j)
@@ -88,27 +99,37 @@ class graphConstructor():
         graph = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
         g = to_networkx(graph, to_undirected=True)
 
-        if is_connected(g):
-            h5_file = h5py.File(f'{self.save_dir}/graph_{cif[:-4]}.h5', 'w')
-            h5_file.create_dataset('Edge Feature Matrix', data=edge_features)
-            h5_file.create_dataset('Node Feature Matrix', data=node_matrix)
-            h5_file.create_dataset('Edge Directions', data=direction)
-            # h5_file.create_dataset('PDF label', data=g0)
-            h5_file.create_dataset('Cell parameters', data=cell_parameters)
-            h5_file.close()
+        if not is_connected(g):
+            # print(lc)
+            # print(metal_distances)
+            print('\n'+cif + '\n')
             return None
-        elif not is_connected(g):
-            print(cif)
-            return None
+        
+        # Simulate spectra
+        placeholder_spectra = torch.zeros([1,1500])
+        
+        # Construct .h5 file
+        h5_file = h5py.File(f'{self.save_dir}/graph_{cif[:-4]}.h5', 'w') # TODO: Think about file naming
+        h5_file.create_dataset('Edge Feature Matrix', data=edge_features)
+        h5_file.create_dataset('Node Feature Matrix', data=node_matrix)
+        h5_file.create_dataset('Edge Directions', data=direction)
+        h5_file.create_dataset('Cell parameters', data=cell_parameters)
+        h5_file.create_dataset('PDF (X-ray)', data=placeholder_spectra)
+        h5_file.create_dataset('PDF (Neutron)', data=placeholder_spectra)
+        h5_file.create_dataset('SAXS', data=placeholder_spectra)
+        h5_file.create_dataset('SANS', data=placeholder_spectra)
+        h5_file.create_dataset('XANES', data=placeholder_spectra)
+        h5_file.close()
+        return None
     
-    def gen_graphs(self, num_processes=cpu_count() - 1):
+    def gen_h5s(self, num_processes=cpu_count() - 1):
         
         #Initialize the number of workers you want to work in parallel. Default is the number of cores -1 to not freeze your pc.
         print('\nConstructing graphs from cif files:')
         with Pool(processes=num_processes) as pool:
             #Run the parallized process
             with tqdm(total=len(self.cifs)) as pbar:
-                for _ in pool.imap_unordered(self.gen_single_graph, self.cifs):
+                for _ in pool.imap_unordered(self.gen_single_h5, self.cifs):
                     pbar.update()
 
         return None
