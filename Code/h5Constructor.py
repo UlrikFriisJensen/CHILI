@@ -42,85 +42,62 @@ class h5Constructor():
         # Check if graph has already been made
         if os.path.isfile(f'{self.save_dir}/graph_{cif[:-4]}.h5'):
             return None
-        
-        # Load in cif file
+
+        # Load cif
         unit_cell = read(f'{self.cif_dir}/{cif}')
         
-        # Construct graph
-        node_matrix = []
-        edge_index1 = []
-        edge_index2 = []
-        edge_features = []
-        
-        n_atoms = len(unit_cell)
-        # positions_real = unit_cell.get_positions()
-        positions_fractional = unit_cell.get_scaled_positions()
-        # position_scale = np.diag(unit_cell.get_cell())
-        atomic_number_matrix = unit_cell.get_atomic_numbers()
-        
-        metal_distances = make_supercell(unit_cell, np.diag([2,2,2])).get_all_distances()
-        lc = np.amin(metal_distances[metal_distances > 0.]) 
-        
-        # try:
-        #     metal_distances = unit_cell[atomic_number_matrix != 8].get_all_distances()
-        #     lc = np.amin(metal_distances[metal_distances > 0.]) 
-        # except:
-        #     metal_distances = make_supercell(unit_cell, np.diag([2,2,2])).get_all_distances()
-        #     lc = np.amin(metal_distances[metal_distances > 0.]) 
-        for i in range(n_atoms):
-            for j in range(i,n_atoms):
-                if i == j: 
-                    continue
-                else:
-                    dist = unit_cell.get_distance(i, j, mic=True) # TODO: Ensure periodic graph edges are actually created
-                    print(dist)
-                if (dist < lc):
-                    edge_index1.append(i)
-                    edge_index2.append(j)
-                    edge_features.append(dist)
-                    edge_index1.append(j)
-                    edge_index2.append(i)
-                    edge_features.append(dist)
-            node_matrix.append([*positions_fractional[i], atomic_number_matrix[i]])
-            
-        edge_features = np.array(edge_features)
+        # Assert if pbc is true
+        if not np.any(unit_cell.pbc):
+            # TODO figure out what to do with unit cells that are not periodic or partly periodic
+            print('Not periodic')
+            # unit_cell.pbc = (1,1,1)
+            return
 
-        node_matrix = np.array(node_matrix)
-        direction = np.array([edge_index1, edge_index2])
+        # Get distances with MIC (NOTE I don't think this makes a difference as long as pbc=True in the unit cell)
+        unit_cell_dist = unit_cell.get_all_distances(mic=True)
+        unit_cell_atoms = unit_cell.get_atomic_numbers().reshape(-1, 1)
+        unit_cell_pos = unit_cell.get_scaled_positions()
+        
+        # Make supercell to get Lattice constant
+        supercell = make_supercell(unit_cell, np.diag([2,2,2]))
+        metal_distances = supercell[supercell.get_atomic_numbers() != 8].get_all_distances()
+        lc = np.amin(metal_distances[metal_distances > 0.])
+        
+        # Create edges and node features
+        lc_mask = (unit_cell_dist > 0) & (unit_cell_dist < lc)
+        direction = np.argwhere(lc_mask).T
+        edge_features = unit_cell_dist[lc_mask]
+        node_features = np.concatenate((unit_cell_pos, unit_cell_atoms), axis=1)
 
         # Construct cell parameter matrix
         cell_parameters = unit_cell.cell.cellpar()
         
         #Create graph to check for connectivity
-        x = torch.tensor(node_matrix, dtype=torch.float)
+        x = torch.tensor(node_features, dtype=torch.float32)
         edge_index = torch.tensor(direction, dtype=torch.long)
-        edge_attr = torch.tensor(edge_features, dtype=torch.float)
+        edge_attr = torch.tensor(edge_features, dtype=torch.float32)
 
         graph = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
         g = to_networkx(graph, to_undirected=True)
 
         if not is_connected(g):
-            # print(lc)
-            # print(metal_distances)
             print('\n'+cif + '\n')
-            return None
+            return
         
         # Simulate spectra
         placeholder_spectra = torch.zeros([1,1500])
         
         # Construct .h5 file
-        h5_file = h5py.File(f'{self.save_dir}/graph_{cif[:-4]}.h5', 'w') # TODO: Think about file naming
-        h5_file.create_dataset('Edge Feature Matrix', data=edge_features)
-        h5_file.create_dataset('Node Feature Matrix', data=node_matrix)
-        h5_file.create_dataset('Edge Directions', data=direction)
-        h5_file.create_dataset('Cell parameters', data=cell_parameters)
-        h5_file.create_dataset('PDF (X-ray)', data=placeholder_spectra)
-        h5_file.create_dataset('PDF (Neutron)', data=placeholder_spectra)
-        h5_file.create_dataset('SAXS', data=placeholder_spectra)
-        h5_file.create_dataset('SANS', data=placeholder_spectra)
-        h5_file.create_dataset('XANES', data=placeholder_spectra)
-        h5_file.close()
-        return None
+        with h5py.File(f'{self.save_dir}/graph_{cif[:-4]}.h5', 'w') as h5_file: # TODO: Think about file naming
+            h5_file.create_dataset('Edge Feature Matrix', data=edge_features)
+            h5_file.create_dataset('Node Feature Matrix', data=node_features)
+            h5_file.create_dataset('Edge Directions', data=direction)
+            h5_file.create_dataset('Cell parameters', data=cell_parameters)
+            h5_file.create_dataset('PDF (X-ray)', data=placeholder_spectra)
+            h5_file.create_dataset('PDF (Neutron)', data=placeholder_spectra)
+            h5_file.create_dataset('SAXS', data=placeholder_spectra)
+            h5_file.create_dataset('SANS', data=placeholder_spectra)
+            h5_file.create_dataset('XANES', data=placeholder_spectra)
     
     def gen_h5s(self, num_processes=cpu_count() - 1):
         
@@ -138,3 +115,12 @@ def calc_dist(position_0, position_1):
     """ Returns the distance between vectors position_0 and position_1 """
     return np.sqrt((position_0[0] - position_1[0]) ** 2 + (position_0[1] - position_1[1]) ** 2 + (
             position_0[2] - position_1[2]) ** 2)
+
+def main():
+    h5C = h5Constructor('../Dataset/CIFs/Train', 'Test_out')
+    h5C.gen_h5s()
+
+
+if __name__ == "__main__":
+    main()
+
