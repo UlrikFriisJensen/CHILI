@@ -4,7 +4,6 @@ import cupy as cp
 import matplotlib.pyplot as plt
 from diffpy.Structure import loadStructure, Structure, Lattice
 from diffpy.srreal.pdfcalculator import PDFCalculator
-from SASCalculator import SASCalculator
 from diffpy.structure.expansion.makeellipsoid import makeSphere
 
 sys.path.append(os.getcwd())
