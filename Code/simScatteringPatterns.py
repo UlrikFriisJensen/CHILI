@@ -338,6 +338,7 @@ def cif_to_NP(filename, radii, sorting=False):
     return np_list
     
 if __name__ == '__main__':
+    import matplotlib.pyplot as plt
     CIF_file = '../Dataset/CIFs/AntiFlourite_Ir2O.cif'
     # Simulate a Pair Distribution Function - on CPU
     generator_PDF = simPDFs()
@@ -346,23 +347,28 @@ if __name__ == '__main__':
     r_constructed, Gr_constructed = generator_PDF.getPDF()
 
     # List of wanted NP sizes (radius) in Å. The resulting NPs will be slightly larger than the given radius because all metals are fully coordinated.
-    radii = [7, 13] # Å
+    radii = [5, 9, 12] # Å
     # Cut out the NPs
     struc_list = cif_to_NP(CIF_file, radii)
 
     # Simulate a Small-Angle Scattering pattern - on GPU
-    atom_list_small = struc_list[0].get_chemical_symbols()
-    xyz_small = np.float16(struc_list[0].get_positions())
-    q = np.arange(0, 3, 0.01)
-    intensity = Debye_Calculator_GPU_bins(atom_list_small, xyz_small, q, n_bins=10000)
-    import matplotlib.pyplot as plt
-    plt.plot(q,intensity)
+    plt.figure()
+    for i in range(len(radii)):
+        atom_list = struc_list[i].get_chemical_symbols()
+        xyz = np.float16(struc_list[i].get_positions())
+        q = np.arange(0, 3, 0.01)
+        intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000)
+        plt.plot(q,intensity, label=f'{radii[i]} Å')
+    plt.legend()
     plt.savefig('../test_saxs.png')
 
     # Simulate a Powder Diffraction pattern - on GPU
-    atom_list_small = struc_list[0].get_chemical_symbols()
-    xyz_small = np.float16(struc_list[0].get_positions())
-    q = np.arange(1, 30, 0.05)
-    intensity = Debye_Calculator_GPU_bins(atom_list_small, xyz_small, q, n_bins=10000)
-    plt.plot(q,intensity)
+    plt.figure()
+    for i in range(len(radii)):
+        atom_list = struc_list[i].get_chemical_symbols()
+        xyz = np.float16(struc_list[i].get_positions())
+        q = np.arange(1, 30, 0.05)
+        intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000)
+        plt.plot(q,intensity, label=f'{radii[i]} Å')
+    plt.legend()
     plt.savefig('../test_xrd.png')
