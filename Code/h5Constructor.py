@@ -38,9 +38,30 @@ class h5Constructor():
         self.cif_dir = str(self.cif_dir)
         self.save_dir = str(self.save_dir)
 
-    def gen_single_h5(self, cif):
+    def repeating_unit_mask_attempt2(self, cell_pos, cell_dist, cell_lens, cell_angles):
+        mask = np.zeros((cell_pos.shape[0], cell_pos.shape[0]))
+        cell_angles = [math.radians(angle) for angle in cell_angles]
+        twice_distance = cell_dist * 2
+        for i, cell_len in enumerate(cell_lens):
+            max_distance = cell_len * math.sin(cell_angles[i])
+            mask += twice_distance >= max_distance
+
+        return mask >= 0
+
+    def repeating_unit_mask_attempt1(self, pos): # TODO vectorize this function
+        p_out = np.zeros((pos.shape[0], pos.shape[0]), dtype='int')
+        for cpos in pos.T:
+            for i in range(len(cpos)):
+                for j in range(len(cpos)):
+                    add = 2 * abs(cpos[i] - cpos[j])
+                    p_out[i,j] += int(add >= 1)
+                    
+        return p_out == 1
+
+    def gen_single_h5(self, cif, override=False):
         # Check if graph has already been made
-        if os.path.isfile(f'{self.save_dir}/graph_{cif[:-4]}.h5'):
+        if os.path.isfile(f'{self.save_dir}/graph_{cif[:-4]}.h5') and not override:
+            print(f'{cif} h5 file already exists')
             return None
 
         # Load cif
@@ -57,7 +78,7 @@ class h5Constructor():
         unit_cell_dist = unit_cell.get_all_distances(mic=True)
         unit_cell_atoms = unit_cell.get_atomic_numbers().reshape(-1, 1)
         unit_cell_pos = unit_cell.get_scaled_positions()
-        
+
         # Make supercell to get Lattice constant
         supercell = make_supercell(unit_cell, np.diag([2,2,2]))
         metal_distances = supercell[supercell.get_atomic_numbers() != 8].get_all_distances()
@@ -65,9 +86,24 @@ class h5Constructor():
         
         # Create edges and node features
         lc_mask = (unit_cell_dist > 0) & (unit_cell_dist < lc)
-        direction = np.argwhere(lc_mask).T
-        edge_features = unit_cell_dist[lc_mask]
-        node_features = np.concatenate((unit_cell_pos, unit_cell_atoms), axis=1)
+        oxy_mask = np.outer(unit_cell_atoms == 8, unit_cell_atoms == 8)
+        metal_mask = np.outer(unit_cell_atoms != 8, unit_cell_atoms !=8)
+        direction = np.argwhere(lc_mask & ~oxy_mask & ~metal_mask).T
+        
+        # Figure out where there should be double bonds because of very small unit cells
+        if False:
+            lens_and_angles = unit_cell.get_cell_lengths_and_angles()
+            unit_cell_lens = lens_and_angles[:3]
+            unit_cell_angles = lens_and_angles[3:]
+            double_bond_mask = self.repeating_unit_mask(unit_cell_pos, unit_cell_dist, unit_cell_lens, unit_cell_angles) & ~oxy_mask & ~metal_mask & lc_mask
+            double_bond_direction = np.argwhere(double_bond_mask).T
+
+            direction = np.concatenate((direction, double_bond_direction), axis=1)
+            edge_features = np.concatenate((unit_cell_dist[lc_mask],unit_cell_dist[double_bond_mask]), axis=0)
+            node_features = np.concatenate((unit_cell_pos, unit_cell_atoms), axis=1)
+        else:
+            edge_features = unit_cell_dist[lc_mask]
+            node_features = np.concatenate((unit_cell_pos, unit_cell_atoms), axis=1)
 
         # Construct cell parameter matrix
         cell_parameters = unit_cell.cell.cellpar()
