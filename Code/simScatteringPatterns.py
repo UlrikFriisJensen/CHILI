@@ -51,11 +51,8 @@ class simPDFs:
         PDFcalc = PDFCalculator(rmin=self.rmin, rmax=self.rmax, rstep=self.rstep,
                                 qmin=self.qmin, qmax=self.qmax, qdamp=self.qdamp, delta2=self.delta2)
         
-        PDFcalc.radiationType="N" # Does not work, WHY?
+        PDFcalc.radiationType="X" # Does not work for Neutrons, WHY?
         r0, g0 = PDFcalc(stru)
-
-        dampening = self.size_damp(r0, self.psize)
-        g0 = g0 * dampening
 
         self.r = r0
         self.Gr = g0
@@ -86,8 +83,10 @@ class simPDFs:
 
         return None
 
-    def getPDF(self):
-        return self.r, self.Gr
+    def getPDF(self, particle_size):
+        dampening = self.size_damp(self.r0, particle_size)
+        g0 = self.Gr * dampening
+        return self.r, g0
 
 
 def read_XYZ(structure_model):
