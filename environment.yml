@@ -21,7 +21,6 @@ dependencies:
   - plotly::plotly_express
   - ase
   - mendeleev
-  - diffpy::diffpy-cmi
   - h5py
   - pytorch-lightning=1.5.10
   - python-kaleido
