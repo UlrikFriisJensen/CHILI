@@ -1,0 +1,30 @@
+name: dataset_env
+channels:
+  - defaults
+  - conda-forge
+  - pytorch
+  - nvidia
+dependencies:
+  - python=3.7
+  - numpy
+  - matplotlib
+  - pandas
+  - seaborn
+  - pytorch=1.10.0
+  - cudatoolkit=11.3
+  - torchvision
+  - torchaudio
+  - iopath
+  - fvcore
+  - pyg::pyg
+  - plotly::plotly
+  - plotly::plotly_express
+  - ase
+  - mendeleev
+  - h5py
+  - pytorch-lightning=1.5.10
+  - python-kaleido
+  - python-graphviz
+  - dscribe
+  - nglview
+  - cupy
