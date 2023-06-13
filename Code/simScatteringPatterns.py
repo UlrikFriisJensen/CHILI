@@ -1,4 +1,4 @@
-import os, random, sys, glob, re
+import os, random, sys, glob, re, csv
 import numpy as np
 import cupy as cp 
 import matplotlib.pyplot as plt
@@ -154,7 +154,7 @@ def retrieve_cromer_mann():
     return cromer_mann_params
 
 
-def atomic_scattering_factors_from_atom(atom, q, cromer_mann_params):
+def atomic_Xray_scattering_factors_from_atom(atom, q, cromer_mann_params):
     """
     Compute the atomic scattering factor for a given atom and array of q values.
 
@@ -172,8 +172,38 @@ def atomic_scattering_factors_from_atom(atom, q, cromer_mann_params):
     q = q.reshape(-1, 1)  # Reshape q to allow broadcasting
     return np.sum(a * np.exp(-b * (q / (4*np.pi))**2), axis=-1) + c
 
+def atomic_neutron_scattering_factors_from_atom(atom):
+    """
+    This function takes an atomic atom symbol as input and returns its coherent 
+    neutron scattering length. It reads the neutron scattering data from a CSV file 
+    named 'neutron_scattering_lengths.csv' which should be located in the same directory 
+    as the script. 
 
-def get_atomic_formfactors_from_xyz(atom_list, xyz, q):
+    Parameters:
+    atom (str): The symbol of the atomic atom. For example: 'H' for Hydrogen, 'He' for Helium, etc.
+
+    Returns:
+    float: The coherent neutron scattering length of the given atomic atom. 
+    If the atom is not found in the data, it returns None and prints an error message.
+    """
+    with open('neutron_scattering_lengths.csv', 'r') as file:
+        reader = csv.reader(file)
+        header = next(reader)
+        data = list(reader)
+    
+    data_array = np.array(data)
+    
+    try:
+        coh_xs_idx = header.index('Coh xs')
+        atom_idx = np.where(data_array[:, 0] == atom)[0][0]
+        coh_xs = float(data_array[atom_idx, coh_xs_idx])
+    except IndexError:
+        print(f'Atom {atom} not found in the dataset.')
+        return None
+    
+    return coh_xs
+    
+def get_atomic_formfactors_from_xyz(atom_list, xyz, q, radiationType = "X"):
     """
     Compute atomic form factors for a list of atoms.
 
@@ -181,18 +211,28 @@ def get_atomic_formfactors_from_xyz(atom_list, xyz, q):
     - atom_list: list of atomic symbols
     - xyz: atomic coordinates
     - q: numpy array of q values
+    - radiationType: Type of radiation used ('X' for X-ray, 'N' for neutron)
 
     Returns:
     - numpy array of atomic form factors for each atom and q
     """
-    cromer_mann_params = retrieve_cromer_mann()
     f_atoms = np.zeros((len(xyz), len(q)))  # Initialize scattering factors array
 
     # Find unique atom types
     unique_atoms = list(set(atom_list))
 
-    # Pre-compute scattering factors for unique atom types
-    unique_f_atoms = np.array([atomic_scattering_factors_from_atom(atom, q, cromer_mann_params) for atom in unique_atoms])
+    if radiationType == "X":
+        cromer_mann_params = retrieve_cromer_mann()
+
+        # Pre-compute scattering factors for unique atom types
+        unique_f_atoms = np.array([atomic_Xray_scattering_factors_from_atom(atom, q, cromer_mann_params) for atom in unique_atoms])
+
+    elif radiationType == "N":
+        # For neutrons, the form factor is constant and equal to the scattering length
+        unique_f_atoms = np.array([atomic_neutron_scattering_factors_from_atom(atom) if atom in unique_atoms else np.nan for atom in unique_atoms])
+        unique_f_atoms = np.tile(unique_f_atoms[:, np.newaxis], len(q))
+    else:
+        raise ValueError("Unsupported radiation type: " + radiationType)
 
     # Create a mapping from atom type to its index in the unique list
     atom_to_index = {atom: index for index, atom in enumerate(unique_atoms)}
@@ -203,7 +243,7 @@ def get_atomic_formfactors_from_xyz(atom_list, xyz, q):
     return f_atoms
 
 
-def Debye_Calculator_GPU(atom_list, xyz, q):
+def Debye_Calculator_GPU(atom_list, xyz, q, radiationType):
     """
     Compute the Debye scattering equation on GPU.
 
@@ -215,7 +255,7 @@ def Debye_Calculator_GPU(atom_list, xyz, q):
     Returns:
     - numpy array of intensities for each q
     """
-    f_atoms = get_atomic_formfactors_from_xyz(atom_list, xyz, q)
+    f_atoms = get_atomic_formfactors_from_xyz(atom_list, xyz, q, radiationType)
 
     xyz_gpu = cp.asarray(xyz)
     q_gpu = cp.asarray(q)
@@ -231,7 +271,7 @@ def Debye_Calculator_GPU(atom_list, xyz, q):
 
     return cp.asnumpy(intensity_gpu)  # Transfer result back to CPU
 
-def Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=1000):
+def Debye_Calculator_GPU_bins(atom_list, xyz, q, radiationType, n_bins=1000):
     """
     Compute the Debye scattering equation on GPU with binned distances.
 
@@ -245,7 +285,7 @@ def Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=1000):
     - numpy array of intensities for each q
     """
     # Retrieve atomic form factors
-    f_atoms = get_atomic_formfactors_from_xyz(atom_list, xyz, q)
+    f_atoms = get_atomic_formfactors_from_xyz(atom_list, xyz, q, radiationType)
   
     # Transfer data to GPU
     xyz_gpu = cp.asarray(xyz)
@@ -295,7 +335,7 @@ struct = read_XYZ(XYZ_file)
 atom_list_small = struct[:,0]
 xyz_small = np.float16(struct[:,1:])
 q = np.arange(0, 3, 0.01)
-intensity = Debye_Calculator_GPU_bins(atom_list_small, xyz_small, q, n_bins=10000)
+intensity = Debye_Calculator_GPU_bins(atom_list_small, xyz_small, q, radiationType, n_bins=10000)
 
 # Simulate a Powder Diffraction pattern - on GPU
 XYZ_file = CutOutXYZFile(CIF_file) # Ulrik has script
@@ -303,4 +343,4 @@ struct = read_XYZ(XYZ_file)
 atom_list_small = struct[:,0]
 xyz_small = np.float16(struct[:,1:])
 q = np.arange(1, 30, 0.05)
-intensity = Debye_Calculator_GPU_bins(atom_list_small, xyz_small, q, n_bins=10000)
+intensity = Debye_Calculator_GPU_bins(atom_list_small, xyz_small, q, radiationType, n_bins=10000)
