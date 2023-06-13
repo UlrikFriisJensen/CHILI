@@ -4,8 +4,12 @@ import cupy as cp
 import matplotlib.pyplot as plt
 from diffpy.Structure import loadStructure, Structure, Lattice
 from diffpy.srreal.pdfcalculator import PDFCalculator
-from SASCalculator import SASCalculator
 from diffpy.structure.expansion.makeellipsoid import makeSphere
+from ase import Atoms
+from ase.io import read
+from ase.build import make_supercell
+from ase.build.tools import sort as ase_sort
+from scipy.spatial import distance_matrix
 
 sys.path.append(os.getcwd())
 random.seed(14)  # 'Random' numbers
@@ -322,25 +326,89 @@ def Debye_Calculator_GPU_bins(atom_list, xyz, q, radiationType, n_bins=1000):
     # Transfer result back to CPU
     return cp.asnumpy(intensity_gpu)
 
-CIF_file = "XXX"
-# Simulate a Pair Distribution Function - on CPU
-generator_PDF = simPDFs()
-generator_PDF.set_parameters(rmin=0, rmax=30, rstep=0.1, Qmin=0.1, Qmax=20, Qdamp=0.04, Biso=0.3, delta2=2, psize=10)
-generator_PDF.genPDFs(CIF_file)
-r_constructed, Gr_constructed = generator_PDF.getPDF()
+def cif_to_NP(filename, radii, sorting=False):
+    # Load cif file
+    unit_cell = read(filename)
+    # Get cell dimensions
+    cell_dims = np.array(unit_cell.cell.cellpar()[:3])
+    # Construct expansion matrix
+    r_max = np.amax(radii)
+    P = np.diag(((r_max // cell_dims) + 2) * 2)
+    # Expand cell
+    cell = make_supercell(prim=unit_cell, P=P)
+    # Center cell
+    cell.positions = cell.get_positions() - np.mean(cell.get_positions(), axis=0)
+    # Get the atoms
+    atoms = np.array(cell.get_chemical_symbols())
+    # Snap cell origo to closest metal
+    cell.positions = cell.get_positions() - cell.get_positions()[atoms != 'O'][np.argmin(np.linalg.norm(cell.get_positions()[atoms != 'O'], ord=2, axis=1))]
+    # Get the coordinates
+    coords = np.array(cell.get_positions())
+    # Atom type filters
+    metal_filter = atoms != 'O'
+    # Distance matrix of all metals
+    metal_dist_matrix = distance_matrix(coords[metal_filter], coords[metal_filter])
+    # Minimum metal-metal distance
+    min_metal_dist = np.unique(metal_dist_matrix)[1]
+    # List to catch all created NPs
+    np_list = []
+    for r in radii:
+        # Construct the NP
+        # List to store atom indices to include in NP
+        np_cell_indices = []
+        for i, atom in enumerate(cell):
+            # Find metals inside NP radius
+            if (atom.symbol != 'O') and (np.linalg.norm(atom.position, ord=2) <= r):
+                # Add index to NP index list
+                np_cell_indices.append(i)
+        # Calculate distance from all included metals to all other atoms
+        oxygen_dist_matrix = distance_matrix(coords[np_cell_indices], coords)
+        # Find indices of all the atoms within the minimum metal distance
+        np_cell_indices.extend(np.argwhere(oxygen_dist_matrix < min_metal_dist)[:,1])
+        # Use only the unique indices
+        np_cell_indices = np.unique(np_cell_indices)
+        # Select the atoms to include in the NP
+        np_cell = cell[np_cell_indices]
+        # Sort atoms
+        if sorting:
+            np_cell = ase_sort(np_cell)
+            if np_cell.get_chemical_symbols()[0] == 'O':
+                np_cell = np_cell[::-1]
+        np_list.append(np_cell)
+    return np_list
+    
+if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    CIF_file = '../Dataset/CIFs/AntiFlourite_Ir2O.cif'
+    # Simulate a Pair Distribution Function - on CPU
+    generator_PDF = simPDFs()
+    generator_PDF.set_parameters(rmin=0, rmax=30, rstep=0.1, Qmin=0.1, Qmax=20, Qdamp=0.04, Biso=0.3, delta2=2, psize=10)
+    generator_PDF.genPDFs(CIF_file)
+    r_constructed, Gr_constructed = generator_PDF.getPDF()
 
-# Simulate a Small-Angle Scattering pattern - on GPU
-XYZ_file = CutOutXYZFile(CIF_file) # Ulrik has script
-struct = read_XYZ(XYZ_file)
-atom_list_small = struct[:,0]
-xyz_small = np.float16(struct[:,1:])
-q = np.arange(0, 3, 0.01)
-intensity = Debye_Calculator_GPU_bins(atom_list_small, xyz_small, q, radiationType, n_bins=10000)
+    # List of wanted NP sizes (radius) in Å. The resulting NPs will be slightly larger than the given radius because all metals are fully coordinated.
+    radii = [5, 9, 12] # Å
+    # Cut out the NPs
+    struc_list = cif_to_NP(CIF_file, radii)
 
-# Simulate a Powder Diffraction pattern - on GPU
-XYZ_file = CutOutXYZFile(CIF_file) # Ulrik has script
-struct = read_XYZ(XYZ_file)
-atom_list_small = struct[:,0]
-xyz_small = np.float16(struct[:,1:])
-q = np.arange(1, 30, 0.05)
-intensity = Debye_Calculator_GPU_bins(atom_list_small, xyz_small, q, radiationType, n_bins=10000)
+    # Simulate a Small-Angle Scattering pattern - on GPU
+    plt.figure()
+    for i in range(len(radii)):
+        atom_list = struc_list[i].get_chemical_symbols()
+        xyz = np.float16(struc_list[i].get_positions())
+        q = np.arange(0, 3, 0.01)
+        intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000)
+        plt.plot(q,intensity, label=f'{radii[i]} Å')
+    plt.legend()
+    plt.savefig('../test_saxs.png')
+
+    # Simulate a Powder Diffraction pattern - on GPU
+    plt.figure()
+    for i in range(len(radii)):
+        atom_list = struc_list[i].get_chemical_symbols()
+        xyz = np.float16(struc_list[i].get_positions())
+        q = np.arange(1, 30, 0.05)
+        intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000)
+        plt.plot(q,intensity, label=f'{radii[i]} Å')
+    plt.legend()
+    plt.savefig('../test_xrd.png')
