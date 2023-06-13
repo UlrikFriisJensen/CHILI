@@ -10,6 +10,8 @@ from ase.io import read
 from ase.build import make_supercell
 from ase.build.tools import sort as ase_sort
 from scipy.spatial import distance_matrix
+from sklearn.metrics.pairwise import euclidean_distances
+from tqdm.auto import tqdm
 
 sys.path.append(os.getcwd())
 random.seed(14)  # 'Random' numbers
@@ -305,9 +307,6 @@ def Debye_Calculator_GPU_bins(atom_list, xyz, q, radiationType, n_bins=1000):
     for i in range(len(q_gpu)):
         f_outer = cp.outer(f_atoms_gpu[:, i], f_atoms_gpu[:, i])
         dist_hist[i], bin_edges = cp.histogram(dist_matrix_gpu, bins=n_bins, weights=f_outer)
-    #f_outer = cp.outer(f_atoms_gpu, f_atoms_gpu)
-    #dist_hist, bin_edges = cp.histogram(dist_matrix_gpu, bins=n_bins, weights=f_outer)
-    
 
     # Compute the bin centers from the edges
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
@@ -324,7 +323,21 @@ def Debye_Calculator_GPU_bins(atom_list, xyz, q, radiationType, n_bins=1000):
         intensity_gpu[i] = cp.sum(dist_hist[i] * sinc_gpu[i])
 
     # Transfer result back to CPU
-    return cp.asnumpy(intensity_gpu)
+    intensity = cp.asnumpy(intensity_gpu)
+
+    return intensity
+
+def calculate_distance_matrix(xyz1, xyz2, batch_size=1000):
+    n_points1 = xyz1.shape[0]
+    n_points2 = xyz2.shape[0]
+    distance_matrix = np.zeros((n_points1, n_points2))
+    for i in tqdm(range(0, n_points1, batch_size), desc='Batched distance matrix calculation'):
+        batch = xyz1[i:i+batch_size]
+        diff = batch[:, np.newaxis, :] - xyz2
+        distance_matrix[i:i+batch_size, :] = np.sqrt(np.sum(diff**2, axis=-1))
+        del batch
+        del diff
+    return distance_matrix
 
 def cif_to_NP(filename, radii, sorting=False):
     # Load cif file
@@ -336,6 +349,7 @@ def cif_to_NP(filename, radii, sorting=False):
     P = np.diag(((r_max // cell_dims) + 2) * 2)
     # Expand cell
     cell = make_supercell(prim=unit_cell, P=P)
+    n_atoms = len(cell)
     # Center cell
     cell.positions = cell.get_positions() - np.mean(cell.get_positions(), axis=0)
     # Get the atoms
@@ -343,43 +357,60 @@ def cif_to_NP(filename, radii, sorting=False):
     # Snap cell origo to closest metal
     cell.positions = cell.get_positions() - cell.get_positions()[atoms != 'O'][np.argmin(np.linalg.norm(cell.get_positions()[atoms != 'O'], ord=2, axis=1))]
     # Get the coordinates
-    coords = np.array(cell.get_positions())
+    coords = np.float16(np.array(cell.get_positions()))
     # Atom type filters
     metal_filter = atoms != 'O'
     # Distance matrix of all metals
-    metal_dist_matrix = distance_matrix(coords[metal_filter], coords[metal_filter])
+    if n_atoms <= 5000:
+        metal_dist_matrix = distance_matrix(coords[metal_filter], coords[metal_filter])
+    else:
+        metal_dist_matrix = calculate_distance_matrix(coords[metal_filter], coords[metal_filter])
     # Minimum metal-metal distance
     min_metal_dist = np.unique(metal_dist_matrix)[1]
+    # Remove the distance matrix to free up RAM
+    del metal_dist_matrix
     # List to catch all created NPs
     np_list = []
-    for r in radii:
+    size_list = []
+    for r in tqdm(radii, desc='Generating NPs'):
         # Construct the NP
         # List to store atom indices to include in NP
         np_cell_indices = []
-        for i, atom in enumerate(cell):
+        for i, atom in tqdm(enumerate(cell), desc='Checking atoms', leave=False):
             # Find metals inside NP radius
             if (atom.symbol != 'O') and (np.linalg.norm(atom.position, ord=2) <= r):
                 # Add index to NP index list
                 np_cell_indices.append(i)
         # Calculate distance from all included metals to all other atoms
-        oxygen_dist_matrix = distance_matrix(coords[np_cell_indices], coords)
+        if len(np_cell_indices) <= 5000:
+            oxygen_dist_matrix = distance_matrix(coords[np_cell_indices], coords)
+        else:
+            oxygen_dist_matrix = calculate_distance_matrix(coords[np_cell_indices], coords)
         # Find indices of all the atoms within the minimum metal distance
         np_cell_indices.extend(np.argwhere(oxygen_dist_matrix < min_metal_dist)[:,1])
+        # Remove the distance matrix to free up RAM
+        del oxygen_dist_matrix
         # Use only the unique indices
         np_cell_indices = np.unique(np_cell_indices)
         # Select the atoms to include in the NP
         np_cell = cell[np_cell_indices]
+        # Find size of NP
+        if len(np_cell) <= 5000:
+            np_size = np.amax(distance_matrix(np_cell.get_positions(), np_cell.get_positions()))
+        else:
+            np_size = np.amax(calculate_distance_matrix(np_cell.get_positions(), np_cell.get_positions()))
         # Sort atoms
         if sorting:
             np_cell = ase_sort(np_cell)
             if np_cell.get_chemical_symbols()[0] == 'O':
                 np_cell = np_cell[::-1]
         np_list.append(np_cell)
-    return np_list
+        size_list.append(np_size)
+    return np_list, size_list
     
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
-    CIF_file = '../Dataset/CIFs/AntiFlourite_Ir2O.cif'
+    CIF_file = '../Dataset/CIFs/Test/Wurtzite_CoO.cif'
     # Simulate a Pair Distribution Function - on CPU
     generator_PDF = simPDFs()
     generator_PDF.set_parameters(rmin=0, rmax=30, rstep=0.1, Qmin=0.1, Qmax=20, Qdamp=0.04, Biso=0.3, delta2=2, psize=10)
@@ -387,28 +418,52 @@ if __name__ == '__main__':
     r_constructed, Gr_constructed = generator_PDF.getPDF()
 
     # List of wanted NP sizes (radius) in Å. The resulting NPs will be slightly larger than the given radius because all metals are fully coordinated.
-    radii = [5, 9, 12] # Å
+    radii = [10, 20, 30] # Å
     # Cut out the NPs
-    struc_list = cif_to_NP(CIF_file, radii)
-
+    struc_list, size_list = cif_to_NP(CIF_file, radii)
     # Simulate a Small-Angle Scattering pattern - on GPU
+    # SAXS
+    plt.figure()
+    for i in range(len(radii)):
+        print(radii[i])
+        atom_list = struc_list[i].get_chemical_symbols()
+        xyz = np.float16(struc_list[i].get_positions())
+        q = np.arange(0, 3, 0.01)
+        intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='X')
+        plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
+    plt.legend(title='NP radius')
+    plt.savefig('../test_saxs.png')
+    
+    # SANS
     plt.figure()
     for i in range(len(radii)):
         atom_list = struc_list[i].get_chemical_symbols()
         xyz = np.float16(struc_list[i].get_positions())
         q = np.arange(0, 3, 0.01)
-        intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000)
-        plt.plot(q,intensity, label=f'{radii[i]} Å')
-    plt.legend()
-    plt.savefig('../test_saxs.png')
+        intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='N')
+        plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
+    plt.legend(title='NP radius')
+    plt.savefig('../test_sans.png')
 
     # Simulate a Powder Diffraction pattern - on GPU
+    # XRD
     plt.figure()
     for i in range(len(radii)):
         atom_list = struc_list[i].get_chemical_symbols()
         xyz = np.float16(struc_list[i].get_positions())
         q = np.arange(1, 30, 0.05)
-        intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000)
-        plt.plot(q,intensity, label=f'{radii[i]} Å')
-    plt.legend()
+        intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='X')
+        plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
+    plt.legend(title='NP radius')
     plt.savefig('../test_xrd.png')
+    
+    # ND
+    plt.figure()
+    for i in range(len(radii)):
+        atom_list = struc_list[i].get_chemical_symbols()
+        xyz = np.float16(struc_list[i].get_positions())
+        q = np.arange(1, 30, 0.05)
+        intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='N')
+        plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
+    plt.legend(title='NP radius')
+    plt.savefig('../test_nd.png')
