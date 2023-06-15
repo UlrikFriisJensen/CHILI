@@ -37,6 +37,7 @@ class simPDFs:
         self.Biso = 0.3  # Atomic vibration
         self.delta2 = 2  # Corelated vibration
         self.psize = 1000000000 # Crystalline size of material
+        self.radiationType = "X"
 
         return None
 
@@ -53,7 +54,7 @@ class simPDFs:
         PDFcalc = PDFCalculator(rmin=self.rmin, rmax=self.rmax, rstep=self.rstep,
                                 qmin=self.qmin, qmax=self.qmax, qdamp=self.qdamp, delta2=self.delta2)
         
-        PDFcalc.radiationType="N" # Does not work, WHY?
+        PDFcalc.scatteringfactortable = radiationType # X for X-rays, N for neutrons, E for electrons
         r0, g0 = PDFcalc(stru)
 
         dampening = self.size_damp(r0, self.psize)
@@ -73,7 +74,7 @@ class simPDFs:
 
         return ph
 
-    def set_parameters(self, rmin, rmax, rstep,  Qmin, Qmax, Qdamp, Biso, delta2, psize):
+    def set_parameters(self, rmin, rmax, rstep,  Qmin, Qmax, Qdamp, Biso, delta2, psize, radiationType):
         # Add some random factor to the simulation parameters
 
         self.rmin = rmin
@@ -85,6 +86,7 @@ class simPDFs:
         self.Biso = Biso
         self.delta2 = delta2
         self.psize = psize
+        self.radiationType
 
         return None
 
@@ -413,7 +415,7 @@ if __name__ == '__main__':
     CIF_file = '../Dataset/CIFs/Test/Wurtzite_CoO.cif'
     # Simulate a Pair Distribution Function - on CPU
     generator_PDF = simPDFs()
-    generator_PDF.set_parameters(rmin=0, rmax=30, rstep=0.1, Qmin=0.1, Qmax=20, Qdamp=0.04, Biso=0.3, delta2=2, psize=10)
+    generator_PDF.set_parameters(rmin=0, rmax=30, rstep=0.1, Qmin=0.1, Qmax=20, Qdamp=0.04, Biso=0.3, delta2=2, psize=10, radiationType="X")
     generator_PDF.genPDFs(CIF_file)
     r_constructed, Gr_constructed = generator_PDF.getPDF()
 
