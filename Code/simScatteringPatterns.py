@@ -35,9 +35,9 @@ class simPDFs:
         self.rmax = 30.1  # Largest r value.
         self.rstep = 0.1  # Nyquist for qmax = 34.1 Å-1
         self.Biso = 0.3  # Atomic vibration
-        self.delta2 = 2  # Corelated vibration
+        self.delta2 = 2  # Correlated vibration
         self.psize = 1000000000 # Crystalline size of material
-        self.radiationType = "X"
+        self.radiationType = "X" # Radiation type set to X-rays
 
         return None
 
@@ -54,11 +54,13 @@ class simPDFs:
         PDFcalc = PDFCalculator(rmin=self.rmin, rmax=self.rmax, rstep=self.rstep,
                                 qmin=self.qmin, qmax=self.qmax, qdamp=self.qdamp, delta2=self.delta2)
         
-        PDFcalc.scatteringfactortable = radiationType # X for X-rays, N for neutrons, E for electrons
+        print (self.radiationType)
+        PDFcalc.scatteringfactortable = self.radiationType # X for X-rays, N for neutrons, E for electrons
         r0, g0 = PDFcalc(stru)
 
         dampening = self.size_damp(r0, self.psize)
         g0 = g0 * dampening
+
 
         self.r = r0
         self.Gr = g0
@@ -74,19 +76,28 @@ class simPDFs:
 
         return ph
 
-    def set_parameters(self, rmin, rmax, rstep,  Qmin, Qmax, Qdamp, Biso, delta2, psize, radiationType):
+    def set_parameters(self, rmin=None, rmax=None, rstep=None, Qmin=None, Qmax=None, Qdamp=None, Biso=None, delta2=None, psize=None, radiationType=None):
         # Add some random factor to the simulation parameters
-
-        self.rmin = rmin
-        self.rmax = rmax
-        self.rstep = rstep
-        self.qmin = Qmin
-        self.qmax = Qmax
-        self.qdamp = Qdamp
-        self.Biso = Biso
-        self.delta2 = delta2
-        self.psize = psize
-        self.radiationType
+        if rmin:
+            self.rmin = rmin
+        if rmax:
+            self.rmax = rmax
+        if rstep:
+            self.rstep = rstep
+        if Qmin:
+            self.qmin = Qmin
+        if Qmax:
+            self.qmax = Qmax
+        if Qdamp:
+            self.qdamp = Qdamp
+        if Biso:
+            self.Biso = Biso
+        if delta2:
+            self.delta2 = delta2
+        if psize:
+            self.psize = psize
+        if radiationType:
+            self.radiationType = radiationType
 
         return None
 
@@ -415,10 +426,11 @@ if __name__ == '__main__':
     CIF_file = '../Dataset/CIFs/Test/Wurtzite_CoO.cif'
     # Simulate a Pair Distribution Function - on CPU
     generator_PDF = simPDFs()
-    generator_PDF.set_parameters(rmin=0, rmax=30, rstep=0.1, Qmin=0.1, Qmax=20, Qdamp=0.04, Biso=0.3, delta2=2, psize=10, radiationType="X")
+    generator_PDF.set_parameters(rmin=0, rmax=30, rstep=0.1, Qmin=0.1, Qmax=20, Qdamp=0.04, Biso=0.3, delta2=2, psize=10, radiationType="N")
     generator_PDF.genPDFs(CIF_file)
     r_constructed, Gr_constructed = generator_PDF.getPDF()
-
+    plt.plot(r_constructed, Gr_constructed)
+    plt.show()
     # List of wanted NP sizes (radius) in Å. The resulting NPs will be slightly larger than the given radius because all metals are fully coordinated.
     radii = [10, 20, 30] # Å
     # Cut out the NPs
