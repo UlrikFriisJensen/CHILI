@@ -7,7 +7,7 @@ from mendeleev import element
 import numpy as np
 from diffpy.srreal.pdfcalculator import DebyePDFCalculator
 import matplotlib.pyplot as plt
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import h5py
 from multiprocessing import Pool, cpu_count
 from pathlib import Path
@@ -121,39 +121,112 @@ class h5Constructor():
             print('\n'+cif + '\n')
             return
         
-        ### Simulate spectra
-        # Simulate X-ray PDFs
-        pdf_xray_generator = simPDFs()
-        pdf_xray_generator.genPDFs()
-        pdf_xray = pdf_xray_generator.getPDF(particle_size=10)
-        placeholder_spectra = torch.zeros([1,1500])
+        # Construct discrete particles for simulation of spectra
+        radii = [5]#, 10, 15, 20, 25] # Å
         
-        # Construct .h5 file # TODO: Create new h5 structure
-        with h5py.File(f'{self.save_dir}/graph_{cif[:-4]}.h5', 'w') as h5_file:
-            h5_file.create_group()
+        struc_list, size_list = cif_to_NP(self.cif_dir + '/' + cif, radii)
+        
+        ### Simulate spectra
+        ## Setup
+        # X-ray PDF
+        pdf_xray_generator = simPDFs()
+        pdf_xray_generator.genPDFs(self.cif_dir + '/' + cif)
+        
+        # Neutron PDF
+        pdf_neutron_generator = simPDFs()
+        pdf_neutron_generator.set_parameters(radiationType='N')
+        pdf_neutron_generator.genPDFs(self.cif_dir + '/' + cif)
+        
+        # Electron PDF
+        pdf_electron_generator = simPDFs()
+        pdf_electron_generator.set_parameters(radiationType='E')
+        pdf_electron_generator.genPDFs(self.cif_dir + '/' + cif)
+        
+        # Small Angle Scattering
+        q_sas = np.arange(0, 3, 0.01)
+        
+        # Diffraction
+        q_diff = np.arange(1, 30, 0.05)
+        
+        ## Simulate spectra
+        for i, np_size in tqdm(enumerate(size_list), desc='Simulating spectra'):
+            # X-ray PDF
+            pdf_xray = pdf_xray_generator.getPDF(particle_size=np_size)
+            
+            # Neutron PDF
+            pdf_neutron = pdf_neutron_generator.getPDF(particle_size=np_size)
+            
+            # Electron PDF
+            pdf_electron = pdf_electron_generator.getPDF(particle_size=np_size)
+            
+            # SAXS
+            saxs = Debye_Calculator_GPU_bins(
+                struc_list[i].get_chemical_symbols(), 
+                np.float16(struc_list[i].get_positions()), 
+                q_sas, 
+                n_bins=10000, 
+                radiationType='X'
+            )
+            
+            # SANS
+            sans = Debye_Calculator_GPU_bins(
+                struc_list[i].get_chemical_symbols(), 
+                np.float16(struc_list[i].get_positions()), 
+                q_sas, 
+                n_bins=10000, 
+                radiationType='N'
+            )
+            
+            # XRD
+            xrd = Debye_Calculator_GPU_bins(
+                struc_list[i].get_chemical_symbols(), 
+                np.float16(struc_list[i].get_positions()), 
+                q_diff, 
+                n_bins=10000, 
+                radiationType='X'
+            )
+            
+            # ND
+            nd = Debye_Calculator_GPU_bins(
+                struc_list[i].get_chemical_symbols(), 
+                np.float16(struc_list[i].get_positions()), 
+                q_diff, 
+                n_bins=10000, 
+                radiationType='N'
+            )
+            
+        
+        # # Construct .h5 file # TODO: Create new h5 structure
+        # with h5py.File(f'{self.save_dir}/graph_{cif[:-4]}.h5', 'w') as h5_file:
+        #     h5_file.create_group()
         
         # Construct .h5 file
-        # with h5py.File(f'{self.save_dir}/graph_{cif[:-4]}.h5', 'w') as h5_file: # TODO: Think about file naming
-        #     h5_file.create_dataset('Edge Feature Matrix', data=edge_features)
-        #     h5_file.create_dataset('Node Feature Matrix', data=node_features)
-        #     h5_file.create_dataset('Edge Directions', data=direction)
-        #     h5_file.create_dataset('Cell parameters', data=cell_parameters)
-        #     h5_file.create_dataset('PDF (X-ray)', data=pdf_xray)
-        #     h5_file.create_dataset('PDF (Neutron)', data=placeholder_spectra)
-        #     h5_file.create_dataset('SAXS', data=placeholder_spectra)
-        #     h5_file.create_dataset('SANS', data=placeholder_spectra)
-        #     h5_file.create_dataset('XANES', data=placeholder_spectra)
+        with h5py.File(f'{self.save_dir}/graph_{cif[:-4]}.h5', 'w') as h5_file: # TODO: Think about file naming
+            h5_file.create_dataset('Edge Feature Matrix', data=edge_features)
+            h5_file.create_dataset('Node Feature Matrix', data=node_features)
+            h5_file.create_dataset('Edge Directions', data=direction)
+            h5_file.create_dataset('Cell parameters', data=cell_parameters)
+            h5_file.create_dataset('PDF (X-ray)', data=pdf_xray)
+            h5_file.create_dataset('PDF (Neutron)', data=pdf_neutron)
+            h5_file.create_dataset('PDF (Electron)', data=pdf_electron)
+            h5_file.create_dataset('SAXS', data=saxs)
+            h5_file.create_dataset('SANS', data=sans)
+            h5_file.create_dataset('XRD', data=xrd)
+            h5_file.create_dataset('ND', data=nd)
     
-    def gen_h5s(self, num_processes=cpu_count() - 1):
+    def gen_h5s(self, num_processes=cpu_count() - 1, parallelize=True):
         
         #Initialize the number of workers you want to work in parallel. Default is the number of cores -1 to not freeze your pc.
         print('\nConstructing graphs from cif files:')
-        with Pool(processes=num_processes) as pool:
-            #Run the parallized process
-            with tqdm(total=len(self.cifs)) as pbar:
-                for _ in pool.imap_unordered(self.gen_single_h5, self.cifs):
-                    pbar.update()
-
+        if parallelize:
+            with Pool(processes=num_processes) as pool:
+                #Run the parallized process
+                with tqdm(total=len(self.cifs)) as pbar:
+                    for _ in pool.imap_unordered(self.gen_single_h5, self.cifs):
+                        pbar.update()
+        else:
+            for cif in tqdm(self.cifs):
+                self.gen_single_h5(cif)
         return None
 
 def calc_dist(position_0, position_1):
