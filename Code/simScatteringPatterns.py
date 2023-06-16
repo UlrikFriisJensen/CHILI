@@ -24,7 +24,7 @@ class simPDFs:
         self.sim_para = ['xyz', 'Biso', 'rmin', 'rmax', 'rstep',
                          'qmin', 'qmax', 'qdamp', 'delta2']
 
-        r = np.arange(self.rmin, self.rmax, self.rstep)  # Used to create header
+        # r = np.arange(self.rmin, self.rmax, self.rstep)  # Used to create header
 
     def _starting_parameters(self):
         
@@ -54,6 +54,7 @@ class simPDFs:
         PDFcalc = PDFCalculator(rmin=self.rmin, rmax=self.rmax, rstep=self.rstep,
                                 qmin=self.qmin, qmax=self.qmax, qdamp=self.qdamp, delta2=self.delta2)
         
+        PDFcalc.radiationType = self.radiationType
         PDFcalc.scatteringfactortable = self.radiationType # X for X-rays, N for neutrons, E for electrons
         r0, g0 = PDFcalc(stru)
 
@@ -93,12 +94,11 @@ class simPDFs:
             self.psize = psize
         if radiationType:
             self.radiationType = radiationType
-
         return None
 
     def getPDF(self, psize=None):
         psize = self.psize
-        dampening = self.size_damp(self.r0, psize)
+        dampening = self.size_damp(self.r, psize)
         g0 = self.Gr * dampening
         return self.r, g0
 
@@ -142,32 +142,58 @@ def retrieve_cromer_mann():
     Returns:
     - cromer_mann_params : dict
     """
-    with open('cromer-mann.txt', 'r') as f:
-        cromer_mann_params = {}
-        lines = f.readlines()
+    try:
+        with open('cromer-mann.txt', 'r') as f:
+            cromer_mann_params = {}
+            lines = f.readlines()
 
-        for line in lines:
-            if line[:2] == '#S':
-                atomicZ = int(line[3:5].strip())
-                symb = line[5:].strip()
+            for line in lines:
+                if line[:2] == '#S':
+                    atomicZ = int(line[3:5].strip())
+                    symb = line[5:].strip()
 
-                ion_state = 0  # default, not an ion
+                    ion_state = 0  # default, not an ion
 
-                g = re.search('(\d+)\+', symb)
-                if g: ion_state = int(g.group()[:-1])  # cation
+                    g = re.search('(\d+)\+', symb)
+                    if g: ion_state = int(g.group()[:-1])  # cation
 
-                g = re.search('(\d+)\-', symb)
-                if g: ion_state = int(g.group()[:-1])  # anion
+                    g = re.search('(\d+)\-', symb)
+                    if g: ion_state = int(g.group()[:-1])  # anion
 
-                g = re.search('\.', symb)
-                if g: ion_state = '.'  # radical
+                    g = re.search('\.', symb)
+                    if g: ion_state = '.'  # radical
 
-            elif line[0] != '#':
-                params = [float(p) for p in line.strip().split()]
-                params.append(params.pop(4))  # parameter 'c' is in the middle -- move it to end
-                cromer_mann_params[(atomicZ, ion_state)] = params
-                cromer_mann_params[symb] = params
+                elif line[0] != '#':
+                    params = [float(p) for p in line.strip().split()]
+                    params.append(params.pop(4))  # parameter 'c' is in the middle -- move it to end
+                    cromer_mann_params[(atomicZ, ion_state)] = params
+                    cromer_mann_params[symb] = params
+    except:
+        with open('./Code/cromer-mann.txt', 'r') as f:
+            cromer_mann_params = {}
+            lines = f.readlines()
 
+            for line in lines:
+                if line[:2] == '#S':
+                    atomicZ = int(line[3:5].strip())
+                    symb = line[5:].strip()
+
+                    ion_state = 0  # default, not an ion
+
+                    g = re.search('(\d+)\+', symb)
+                    if g: ion_state = int(g.group()[:-1])  # cation
+
+                    g = re.search('(\d+)\-', symb)
+                    if g: ion_state = int(g.group()[:-1])  # anion
+
+                    g = re.search('\.', symb)
+                    if g: ion_state = '.'  # radical
+
+                elif line[0] != '#':
+                    params = [float(p) for p in line.strip().split()]
+                    params.append(params.pop(4))  # parameter 'c' is in the middle -- move it to end
+                    cromer_mann_params[(atomicZ, ion_state)] = params
+                    cromer_mann_params[symb] = params
     return cromer_mann_params
 
 
@@ -203,11 +229,16 @@ def atomic_neutron_scattering_factors_from_atom(atom):
     float: The coherent neutron scattering length of the given atomic atom. 
     If the atom is not found in the data, it returns None and prints an error message.
     """
-    with open('neutron_scattering_lengths.csv', 'r') as file:
-        reader = csv.reader(file)
-        header = next(reader)
-        data = list(reader)
-    
+    try:
+        with open('neutron_scattering_lengths.csv', 'r') as file:
+            reader = csv.reader(file)
+            header = next(reader)
+            data = list(reader)
+    except:
+        with open('./Code/neutron_scattering_lengths.csv', 'r') as file:
+            reader = csv.reader(file)
+            header = next(reader)
+            data = list(reader)
     data_array = np.array(data)
     
     try:

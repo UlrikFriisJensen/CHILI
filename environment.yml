@@ -10,9 +10,9 @@ dependencies:
   - matplotlib
   - pandas
   - seaborn
-  - pytorch=1.10.0
+  - pytorch::pytorch=1.10.0
   - cudatoolkit=11.3
-  - torchvision
+  - pytorch::torchvision
   - torchaudio
   - iopath
   - fvcore
