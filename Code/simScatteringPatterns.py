@@ -54,13 +54,8 @@ class simPDFs:
         PDFcalc = PDFCalculator(rmin=self.rmin, rmax=self.rmax, rstep=self.rstep,
                                 qmin=self.qmin, qmax=self.qmax, qdamp=self.qdamp, delta2=self.delta2)
         
-        print (self.radiationType)
         PDFcalc.scatteringfactortable = self.radiationType # X for X-rays, N for neutrons, E for electrons
         r0, g0 = PDFcalc(stru)
-
-        dampening = self.size_damp(r0, self.psize)
-        g0 = g0 * dampening
-
 
         self.r = r0
         self.Gr = g0
@@ -101,8 +96,11 @@ class simPDFs:
 
         return None
 
-    def getPDF(self):
-        return self.r, self.Gr
+    def getPDF(self, psize=None):
+        psize = self.psize
+        dampening = self.size_damp(self.r0, psize)
+        g0 = self.Gr * dampening
+        return self.r, g0
 
 
 def read_XYZ(structure_model):

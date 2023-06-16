@@ -18,6 +18,7 @@ from networkx import draw
 from ase.io import write, read
 from ase.build import make_supercell
 from ase.neighborlist import neighbor_list, natural_cutoffs
+from Code.simScatteringPatterns import simPDFs, cif_to_NP, Debye_Calculator_GPU_bins
 
 #%% Graph construction
 
@@ -120,20 +121,28 @@ class h5Constructor():
             print('\n'+cif + '\n')
             return
         
-        # Simulate spectra
+        ### Simulate spectra
+        # Simulate X-ray PDFs
+        pdf_xray_generator = simPDFs()
+        pdf_xray_generator.genPDFs()
+        pdf_xray = pdf_xray_generator.getPDF(particle_size=10)
         placeholder_spectra = torch.zeros([1,1500])
         
+        # Construct .h5 file # TODO: Create new h5 structure
+        with h5py.File(f'{self.save_dir}/graph_{cif[:-4]}.h5', 'w') as h5_file:
+            h5_file.create_group()
+        
         # Construct .h5 file
-        with h5py.File(f'{self.save_dir}/graph_{cif[:-4]}.h5', 'w') as h5_file: # TODO: Think about file naming
-            h5_file.create_dataset('Edge Feature Matrix', data=edge_features)
-            h5_file.create_dataset('Node Feature Matrix', data=node_features)
-            h5_file.create_dataset('Edge Directions', data=direction)
-            h5_file.create_dataset('Cell parameters', data=cell_parameters)
-            h5_file.create_dataset('PDF (X-ray)', data=placeholder_spectra)
-            h5_file.create_dataset('PDF (Neutron)', data=placeholder_spectra)
-            h5_file.create_dataset('SAXS', data=placeholder_spectra)
-            h5_file.create_dataset('SANS', data=placeholder_spectra)
-            h5_file.create_dataset('XANES', data=placeholder_spectra)
+        # with h5py.File(f'{self.save_dir}/graph_{cif[:-4]}.h5', 'w') as h5_file: # TODO: Think about file naming
+        #     h5_file.create_dataset('Edge Feature Matrix', data=edge_features)
+        #     h5_file.create_dataset('Node Feature Matrix', data=node_features)
+        #     h5_file.create_dataset('Edge Directions', data=direction)
+        #     h5_file.create_dataset('Cell parameters', data=cell_parameters)
+        #     h5_file.create_dataset('PDF (X-ray)', data=pdf_xray)
+        #     h5_file.create_dataset('PDF (Neutron)', data=placeholder_spectra)
+        #     h5_file.create_dataset('SAXS', data=placeholder_spectra)
+        #     h5_file.create_dataset('SANS', data=placeholder_spectra)
+        #     h5_file.create_dataset('XANES', data=placeholder_spectra)
     
     def gen_h5s(self, num_processes=cpu_count() - 1):
         
