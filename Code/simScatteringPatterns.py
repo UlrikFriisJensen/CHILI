@@ -54,7 +54,6 @@ class simPDFs:
         PDFcalc = PDFCalculator(rmin=self.rmin, rmax=self.rmax, rstep=self.rstep,
                                 qmin=self.qmin, qmax=self.qmax, qdamp=self.qdamp, delta2=self.delta2)
         
-        PDFcalc.radiationType = self.radiationType
         PDFcalc.scatteringfactortable = self.radiationType # X for X-rays, N for neutrons, E for electrons
         r0, g0 = PDFcalc(stru)
 
@@ -97,7 +96,8 @@ class simPDFs:
         return None
 
     def getPDF(self, psize=None):
-        psize = self.psize
+        if not psize:
+            psize = self.psize
         dampening = self.size_damp(self.r, psize)
         g0 = self.Gr * dampening
         return self.r, g0
@@ -452,61 +452,93 @@ def cif_to_NP(filename, radii, sorting=False):
     
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
+    from timeit import default_timer
+    start_time = default_timer()
     CIF_file = '../Dataset/CIFs/Test/Wurtzite_CoO.cif'
-    # Simulate a Pair Distribution Function - on CPU
-    generator_PDF = simPDFs()
-    generator_PDF.set_parameters(rmin=0, rmax=30, rstep=0.1, Qmin=0.1, Qmax=20, Qdamp=0.04, Biso=0.3, delta2=2, psize=10, radiationType="N")
-    generator_PDF.genPDFs(CIF_file)
-    r_constructed, Gr_constructed = generator_PDF.getPDF()
-    plt.plot(r_constructed, Gr_constructed)
-    plt.show()
     # List of wanted NP sizes (radius) in Å. The resulting NPs will be slightly larger than the given radius because all metals are fully coordinated.
-    radii = [10, 20, 30] # Å
+    radii = [5, 10, 25] # Å
     # Cut out the NPs
+    timer_start = default_timer()
     struc_list, size_list = cif_to_NP(CIF_file, radii)
+    time_elapsed = default_timer() - timer_start
+    print(f'\ncif_to_NP ({radii} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
+    
+    # Simulate a Pair Distribution Function - on CPU
+    for radiationType in ['X', 'N']:
+        timer_start = default_timer()
+        generator_PDF = simPDFs()
+        generator_PDF.set_parameters(radiationType=radiationType)
+        generator_PDF.genPDFs(CIF_file)
+        time_elapsed = default_timer() - timer_start
+        print(f'\ngenPDFs ({radiationType})\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
+        plt.figure()
+        for i, psize in enumerate(size_list):
+            timer_start = default_timer()
+            r_constructed, Gr_constructed = generator_PDF.getPDF(psize=psize)
+            time_elapsed = default_timer() - timer_start
+            print(f'\ngetPDF ({psize:.2f} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
+            plt.plot(r_constructed, Gr_constructed + i*20, label=f'{psize:.2f} Å')
+        time2_PDF = default_timer()
+        plt.legend(title='NP size')
+        plt.savefig(f'../test_PDF_{radiationType}.png')
+    
     # Simulate a Small-Angle Scattering pattern - on GPU
     # SAXS
     plt.figure()
     for i in range(len(radii)):
-        print(radii[i])
+        timer_start = default_timer()
         atom_list = struc_list[i].get_chemical_symbols()
         xyz = np.float16(struc_list[i].get_positions())
         q = np.arange(0, 3, 0.01)
         intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='X')
+        time_elapsed = default_timer() - timer_start
+        print(f'\n(SAXS) Debye_Calculator_GPU_bins ({size_list[i]:.2f} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
         plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
-    plt.legend(title='NP radius')
+    plt.legend(title='NP size')
     plt.savefig('../test_saxs.png')
     
     # SANS
     plt.figure()
     for i in range(len(radii)):
+        timer_start = default_timer()
         atom_list = struc_list[i].get_chemical_symbols()
         xyz = np.float16(struc_list[i].get_positions())
         q = np.arange(0, 3, 0.01)
         intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='N')
+        time_elapsed = default_timer() - timer_start
+        print(f'\n(SANS) Debye_Calculator_GPU_bins ({size_list[i]:.2f} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
         plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
-    plt.legend(title='NP radius')
+    plt.legend(title='NP size')
     plt.savefig('../test_sans.png')
 
     # Simulate a Powder Diffraction pattern - on GPU
     # XRD
     plt.figure()
     for i in range(len(radii)):
+        timer_start = default_timer()
         atom_list = struc_list[i].get_chemical_symbols()
         xyz = np.float16(struc_list[i].get_positions())
         q = np.arange(1, 30, 0.05)
         intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='X')
+        time_elapsed = default_timer() - timer_start
+        print(f'\n(XRD) Debye_Calculator_GPU_bins ({size_list[i]:.2f} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
         plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
-    plt.legend(title='NP radius')
+    plt.legend(title='NP size')
     plt.savefig('../test_xrd.png')
     
     # ND
     plt.figure()
     for i in range(len(radii)):
+        timer_start = default_timer()
         atom_list = struc_list[i].get_chemical_symbols()
         xyz = np.float16(struc_list[i].get_positions())
         q = np.arange(1, 30, 0.05)
         intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='N')
+        time_elapsed = default_timer() - timer_start
+        print(f'\n(ND) Debye_Calculator_GPU_bins ({size_list[i]:.2f} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
         plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
-    plt.legend(title='NP radius')
+    plt.legend(title='NP size')
     plt.savefig('../test_nd.png')
+
+    total_time = default_timer() - start_time
+    print(f'\nTotal time\nTime: {total_time:{".2f" if total_time > 0.1 else ".2e"}} s')
