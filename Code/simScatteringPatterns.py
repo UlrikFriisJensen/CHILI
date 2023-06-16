@@ -373,7 +373,7 @@ def calculate_distance_matrix(xyz1, xyz2, batch_size=1000):
     n_points1 = xyz1.shape[0]
     n_points2 = xyz2.shape[0]
     distance_matrix = np.zeros((n_points1, n_points2))
-    for i in tqdm(range(0, n_points1, batch_size), desc='Batched distance matrix calculation'):
+    for i in tqdm(range(0, n_points1, batch_size), desc='Batched distance matrix calculation', leave=False):
         batch = xyz1[i:i+batch_size]
         diff = batch[:, np.newaxis, :] - xyz2
         distance_matrix[i:i+batch_size, :] = np.sqrt(np.sum(diff**2, axis=-1))
@@ -414,7 +414,7 @@ def cif_to_NP(filename, radii, sorting=False):
     # List to catch all created NPs
     np_list = []
     size_list = []
-    for r in tqdm(radii, desc='Generating NPs'):
+    for r in tqdm(radii, desc='Generating NPs', leave=False):
         # Construct the NP
         # List to store atom indices to include in NP
         np_cell_indices = []
