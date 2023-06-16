@@ -37,7 +37,7 @@ class simPDFs:
         self.Biso = 0.3  # Atomic vibration
         self.delta2 = 2  # Correlated vibration
         self.psize = 1000000000 # Crystalline size of material
-        self.radiationType = "X"
+        self.radiationType = "X" # Radiation type set to X-rays
 
         return None
 
@@ -96,8 +96,9 @@ class simPDFs:
 
         return None
 
-    def getPDF(self, particle_size):
-        dampening = self.size_damp(self.r0, particle_size)
+    def getPDF(self, psize=None):
+        psize = self.psize
+        dampening = self.size_damp(self.r0, psize)
         g0 = self.Gr * dampening
         return self.r, g0
 
@@ -423,10 +424,11 @@ if __name__ == '__main__':
     CIF_file = '../Dataset/CIFs/Test/Wurtzite_CoO.cif'
     # Simulate a Pair Distribution Function - on CPU
     generator_PDF = simPDFs()
-    generator_PDF.set_parameters(rmin=0, rmax=30, rstep=0.1, Qmin=0.1, Qmax=20, Qdamp=0.04, Biso=0.3, delta2=2, psize=10, radiationType="X")
+    generator_PDF.set_parameters(rmin=0, rmax=30, rstep=0.1, Qmin=0.1, Qmax=20, Qdamp=0.04, Biso=0.3, delta2=2, psize=10, radiationType="N")
     generator_PDF.genPDFs(CIF_file)
     r_constructed, Gr_constructed = generator_PDF.getPDF()
-
+    plt.plot(r_constructed, Gr_constructed)
+    plt.show()
     # List of wanted NP sizes (radius) in Å. The resulting NPs will be slightly larger than the given radius because all metals are fully coordinated.
     radii = [10, 20, 30] # Å
     # Cut out the NPs
