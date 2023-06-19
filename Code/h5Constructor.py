@@ -7,7 +7,7 @@ from mendeleev import element
 import numpy as np
 from diffpy.srreal.pdfcalculator import DebyePDFCalculator
 import matplotlib.pyplot as plt
-from tqdm.auto import tqdm
+from tqdm import tqdm
 import h5py
 from multiprocessing import Pool, cpu_count
 from pathlib import Path
@@ -125,7 +125,6 @@ class h5Constructor():
         radii = [5, 10, 15, 20, 25] # Å
         
         struc_list, size_list = cif_to_NP(self.cif_dir + '/' + cif, radii)
-        
         ### Simulate spectra
         ## Setup
         # X-ray PDF
@@ -162,12 +161,12 @@ class h5Constructor():
                 # X-ray PDF
                 pdf_xray = pdf_xray_generator.getPDF(psize=np_size)
                 # Save spectra
-                spectra_size_h5.create_dataset('PDF (X-ray)', data=pdf_xray[1])
+                spectra_size_h5.create_dataset('PDF (X-ray)', data=pdf_xray)
                 
                 # Neutron PDF
                 pdf_neutron = pdf_neutron_generator.getPDF(psize=np_size)
                 # Save spectra
-                spectra_size_h5.create_dataset('PDF (Neutron)', data=pdf_neutron[1])
+                spectra_size_h5.create_dataset('PDF (Neutron)', data=pdf_neutron)
                 
                 # SAXS
                 saxs = Debye_Calculator_GPU_bins(
@@ -178,7 +177,7 @@ class h5Constructor():
                     radiationType='X'
                 )
                 # Save spectra
-                spectra_size_h5.create_dataset('SAXS', data=saxs)
+                spectra_size_h5.create_dataset('SAXS', data=np.concatenate(q_sas, saxs))
                 
                 # SANS
                 sans = Debye_Calculator_GPU_bins(
@@ -189,7 +188,7 @@ class h5Constructor():
                     radiationType='N'
                 )
                 # Save spectra
-                spectra_size_h5.create_dataset('SANS', data=sans)
+                spectra_size_h5.create_dataset('SANS', data=np.concatenate(q_sas, sans))
                 
                 # XRD
                 xrd = Debye_Calculator_GPU_bins(
@@ -212,19 +211,6 @@ class h5Constructor():
                 )
                 # Save spectra
                 spectra_size_h5.create_dataset('ND', data=nd)
-        
-            # # Construct .h5 file
-            # with h5py.File(f'{self.save_dir}/graph_{cif[:-4]}_{np_size:.2f}Å.h5', 'w') as h5_file: # TODO: Think about file naming
-            #     h5_file.create_dataset('Edge Feature Matrix', data=edge_features)
-            #     h5_file.create_dataset('Node Feature Matrix', data=node_features)
-            #     h5_file.create_dataset('Edge Directions', data=direction)
-            #     h5_file.create_dataset('Cell parameters', data=cell_parameters)
-            #     h5_file.create_dataset('PDF (X-ray)', data=pdf_xray[1])
-            #     h5_file.create_dataset('PDF (Neutron)', data=pdf_neutron[1])
-            #     h5_file.create_dataset('SAXS', data=saxs)
-            #     h5_file.create_dataset('SANS', data=sans)
-            #     h5_file.create_dataset('XRD', data=xrd)
-            #     h5_file.create_dataset('ND', data=nd)
     
     def gen_h5s(self, num_processes=cpu_count() - 1, parallelize=True):
         

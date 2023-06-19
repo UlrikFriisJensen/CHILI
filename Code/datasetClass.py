@@ -5,6 +5,8 @@ from pathlib import Path
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 import numpy as np
+import h5py
+from collections import namedtuple
 
 # Chemistry imports
 from diffpy.Structure import loadStructure
@@ -27,7 +29,8 @@ class InOrgMatDatasets(Dataset):
 
     @property
     def raw_file_names(self):
-        return [f'{self.dataset}.zip']
+        raw_file_names = [str(filepath.relative_to(self.raw_dir)) for filepath in Path(self.raw_dir).glob('**/*.h5')]
+        return raw_file_names
 
     @property
     def processed_file_names(self):
@@ -40,35 +43,45 @@ class InOrgMatDatasets(Dataset):
         Path(path).unlink()
 
     def process(self):            
-        train_files = sorted([str(x.name) for x in Path(self.raw_dir + '/Train/').glob('*.cif')])
-        # print(train_files)
-        
-        # TODO: Construct graphs
-        # TODO: Calculate spectra
-        # TODO: Normalize graphs
-        # TODO: Save in a format that is easy to load using DataLoader
-        
-        val_files = sorted([str(x.name) for x in Path(self.raw_dir + '/Val/').glob('*.cif')])
-        # print(val_files)
-        
-        test_files = sorted([str(x.name) for x in Path(self.raw_dir + '/Test/').glob('*.cif')])
-        # print(test_files)
-            # # Read data from `raw_path`.
-            # data = Data(...)
+        idx = 0
+        for raw_path in self.raw_paths:
+            # Read data from `raw_path`.
+            with h5py.File(raw_path, 'r') as h5f:
+                # Read graph attributes
+                node_feat = torch.tensor(h5f['GraphElements']['NodeFeatures'][:], dtype=torch.float32)
+                edge_index = torch.tensor(h5f['GraphElements']['EdgeDirections'][:], dtype=torch.long)
+                edge_feat = torch.tensor(h5f['GraphElements']['EdgeFeatures'][:], dtype=torch.float32)
+                # TODO: Figure out if coordinates should be placed in pos argument
+                # Read spectra
+                for key in h5f['Spectra'].keys():
+                    # TODO: Get cell parameters here as well
+                    target_dict = dict(
+                        np_size = float(key[:-1]),
+                        nd = torch.tensor(h5f['Spectra'][key]['ND'][:], dtype=torch.float32),
+                        xrd = torch.tensor(h5f['Spectra'][key]['XRD'][:], dtype=torch.float32),
+                        nPDF = torch.tensor(h5f['Spectra'][key]['PDF (Neutron)'][:], dtype=torch.float32),
+                        xPDF = torch.tensor(h5f['Spectra'][key]['PDF (X-ray)'][:], dtype=torch.float32),
+                        sans = torch.tensor(h5f['Spectra'][key]['SANS'][:], dtype=torch.float32),
+                        saxs = torch.tensor(h5f['Spectra'][key]['SAXS'][:], dtype=torch.float32),
+                    )
+                    
+                    data = Data(x=node_feat, edge_index=edge_index, edge_attr=edge_feat, y=target_dict) # TODO: Don't know if we should use pos or include positions in node features
 
-            # if self.pre_filter is not None and not self.pre_filter(data):
-            #     continue
+                    if self.pre_filter is not None and not self.pre_filter(data):
+                        continue
 
-            # if self.pre_transform is not None:
-            #     data = self.pre_transform(data)
+                    if self.pre_transform is not None:
+                        data = self.pre_transform(data)
 
-            # torch.save(data, Path(self.processed_dir).joinpath(f'data.pt'))
+                    torch.save(data, Path(self.processed_dir).joinpath(f'data_{idx}.pt'))
+                    idx += 1
+                    
 
     def len(self):
         return len(self.processed_file_names)
 
     def get(self, idx):
-        data = torch.load(Path(self.processed_dir).joinpath(f'data.pt'))
+        data = torch.load(Path(self.processed_dir).joinpath(f'data_{idx}.pt'))
         return data
     
 if __name__ == '__main__':
