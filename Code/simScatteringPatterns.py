@@ -11,7 +11,7 @@ from ase.build import make_supercell
 from ase.build.tools import sort as ase_sort
 from scipy.spatial import distance_matrix
 from sklearn.metrics.pairwise import euclidean_distances
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 sys.path.append(os.getcwd())
 random.seed(14)  # 'Random' numbers

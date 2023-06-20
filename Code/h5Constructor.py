@@ -177,7 +177,7 @@ class h5Constructor():
                     radiationType='X'
                 )
                 # Save spectra
-                spectra_size_h5.create_dataset('SAXS', data=np.concatenate(q_sas, saxs))
+                spectra_size_h5.create_dataset('SAXS', data=np.vstack((q_sas, saxs)))
                 
                 # SANS
                 sans = Debye_Calculator_GPU_bins(
@@ -188,7 +188,7 @@ class h5Constructor():
                     radiationType='N'
                 )
                 # Save spectra
-                spectra_size_h5.create_dataset('SANS', data=np.concatenate(q_sas, sans))
+                spectra_size_h5.create_dataset('SANS', data=np.vstack((q_sas, sans)))
                 
                 # XRD
                 xrd = Debye_Calculator_GPU_bins(
@@ -199,7 +199,7 @@ class h5Constructor():
                     radiationType='X'
                 )
                 # Save spectra
-                spectra_size_h5.create_dataset('XRD', data=xrd)
+                spectra_size_h5.create_dataset('XRD', data=np.vstack((q_diff, xrd)))
                                 
                 # ND
                 nd = Debye_Calculator_GPU_bins(
@@ -210,7 +210,7 @@ class h5Constructor():
                     radiationType='N'
                 )
                 # Save spectra
-                spectra_size_h5.create_dataset('ND', data=nd)
+                spectra_size_h5.create_dataset('ND', data=np.vstack((q_diff, nd)))
     
     def gen_h5s(self, num_processes=cpu_count() - 1, parallelize=True):
         

@@ -3,7 +3,7 @@
 # Standard imports
 from pathlib import Path
 from itertools import repeat
-from tqdm.auto import tqdm
+from tqdm import tqdm
 import re
 from typing import Union, Tuple
 
