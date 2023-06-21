@@ -477,7 +477,7 @@ if __name__ == '__main__':
             r_constructed, Gr_constructed = generator_PDF.getPDF(psize=psize)
             time_elapsed = default_timer() - timer_start
             print(f'\ngetPDF ({psize:.2f} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
-            plt.plot(r_constructed, Gr_constructed + i*20, label=f'{psize:.2f} Å')
+            plt.plot(r_constructed, Gr_constructed / np.amax(Gr_constructed) + i, label=f'{psize:.2f} Å')
         time2_PDF = default_timer()
         plt.legend(title='NP size')
         plt.savefig(f'../test_PDF_{radiationType}.png')
@@ -493,7 +493,7 @@ if __name__ == '__main__':
         intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='X')
         time_elapsed = default_timer() - timer_start
         print(f'\n(SAXS) Debye_Calculator_GPU_bins ({size_list[i]:.2f} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
-        plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
+        plt.plot(q,intensity / np.amax(intensity) + i, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
     plt.legend(title='NP size')
     plt.savefig('../test_saxs.png')
     
@@ -507,7 +507,7 @@ if __name__ == '__main__':
         intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='N')
         time_elapsed = default_timer() - timer_start
         print(f'\n(SANS) Debye_Calculator_GPU_bins ({size_list[i]:.2f} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
-        plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
+        plt.plot(q,intensity / np.amax(intensity) + i, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
     plt.legend(title='NP size')
     plt.savefig('../test_sans.png')
 
@@ -522,7 +522,7 @@ if __name__ == '__main__':
         intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='X')
         time_elapsed = default_timer() - timer_start
         print(f'\n(XRD) Debye_Calculator_GPU_bins ({size_list[i]:.2f} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
-        plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
+        plt.plot(q,intensity / np.amax(intensity) + i, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
     plt.legend(title='NP size')
     plt.savefig('../test_xrd.png')
     
@@ -536,7 +536,7 @@ if __name__ == '__main__':
         intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='N')
         time_elapsed = default_timer() - timer_start
         print(f'\n(ND) Debye_Calculator_GPU_bins ({size_list[i]:.2f} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
-        plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
+        plt.plot(q,intensity / np.amax(intensity) + i, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
     plt.legend(title='NP size')
     plt.savefig('../test_nd.png')
 
