@@ -25,23 +25,27 @@ class InOrgMatDatasets(Dataset):
     def __init__(self, dataset, root='../Dataset/', transform=None, pre_transform=None, pre_filter=None, force_update=False):
         self.dataset = dataset
         root += self.dataset + '/'
-        self.force_update = force_update
+        if force_update:
+            self.force_download = True
+            self.force_process = True
         super().__init__(root, transform, pre_transform, pre_filter)
 
     @property
     def raw_file_names(self):
-        if not self.force_update:
+        if not self.force_download:
             raw_file_names = [str(filepath.relative_to(self.raw_dir)) for filepath in Path(self.raw_dir).glob('**/*.h5')]
         else:
             raw_file_names = []
+            self.force_download = False
         return raw_file_names
 
     @property
     def processed_file_names(self):
-        if not self.force_update:
+        if not self.force_process:
             processed_file_names = [str(filepath.relative_to(self.processed_dir)) for filepath in Path(self.processed_dir).glob('**/*.pt')]
         else:
             processed_file_names = []
+            self.force_process = False
         return processed_file_names
 
     def download(self):
