@@ -104,8 +104,15 @@ class h5Constructor():
             node_features = np.concatenate((unit_cell_pos, unit_cell_atoms), axis=1)
         else:
             edge_features = unit_cell_dist[lc_mask]
-            print([element(atom[0]) for atom in unit_cell_atoms])
-            node_features = [[element(atom[0]).atomic_number, element(atom[0]).atomic_radius, element(atom[0]).atomic_weight, element(atom[0]).electron_affinity] for atom in unit_cell_atoms]
+            node_features = np.array([
+                [
+                    element(int(atom[0])).atomic_number, 
+                    element(int(atom[0])).atomic_radius, 
+                    element(int(atom[0])).atomic_weight, 
+                    element(int(atom[0])).electron_affinity
+                ] 
+                for atom in unit_cell_atoms
+                ])
             node_pos_real = unit_cell.get_positions()
             node_pos_relative = unit_cell_pos
 
@@ -125,7 +132,7 @@ class h5Constructor():
             return
         
         # Construct discrete particles for simulation of spectra
-        radii = [5]#, 10, 15, 20, 25] # Å
+        radii = [5, 10, 15, 20, 25] # Å
         
         struc_list, size_list = cif_to_NP(self.cif_dir + '/' + cif, radii)
         ### Simulate spectra
@@ -158,6 +165,7 @@ class h5Constructor():
             params_h5 = h5_file.require_group('OtherLabels')
             params_h5.create_dataset('CellParameters', data=cell_parameters)
             params_h5.create_dataset('CrystalType', data=cif.split('_')[0])
+            params_h5.create_dataset('ElementsPresent', data=np.unique(node_features[:,0]))
 
             # Save spectra
             spectra_h5 = h5_file.require_group('Spectra')
@@ -171,12 +179,12 @@ class h5Constructor():
                 # X-ray PDF
                 pdf_xray = pdf_xray_generator.getPDF(psize=np_size)
                 # Save spectra
-                spectra_size_h5.create_dataset('PDF (X-ray)', data=pdf_xray)
+                spectra_size_h5.create_dataset('xPDF', data=pdf_xray)
                 
                 # Neutron PDF
                 pdf_neutron = pdf_neutron_generator.getPDF(psize=np_size)
                 # Save spectra
-                spectra_size_h5.create_dataset('PDF (Neutron)', data=pdf_neutron)
+                spectra_size_h5.create_dataset('nPDF', data=pdf_neutron)
                 
                 # SAXS
                 saxs = Debye_Calculator_GPU_bins(
