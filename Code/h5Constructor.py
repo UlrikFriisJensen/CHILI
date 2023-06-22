@@ -7,7 +7,7 @@ from mendeleev import element
 import numpy as np
 from diffpy.srreal.pdfcalculator import DebyePDFCalculator
 import matplotlib.pyplot as plt
-from tqdm.auto import tqdm
+from tqdm import tqdm
 import h5py
 from multiprocessing import Pool, cpu_count
 from pathlib import Path
@@ -104,7 +104,17 @@ class h5Constructor():
             node_features = np.concatenate((unit_cell_pos, unit_cell_atoms), axis=1)
         else:
             edge_features = unit_cell_dist[lc_mask]
-            node_features = np.concatenate((unit_cell_pos, unit_cell_atoms), axis=1)
+            node_features = np.array([
+                [
+                    element(int(atom[0])).atomic_number, 
+                    element(int(atom[0])).atomic_radius, 
+                    element(int(atom[0])).atomic_weight, 
+                    element(int(atom[0])).electron_affinity
+                ] 
+                for atom in unit_cell_atoms
+                ])
+            node_pos_real = unit_cell.get_positions()
+            node_pos_relative = unit_cell_pos
 
         # Construct cell parameter matrix
         cell_parameters = unit_cell.cell.cellpar()
@@ -122,10 +132,9 @@ class h5Constructor():
             return
         
         # Construct discrete particles for simulation of spectra
-        radii = [5]#, 10, 15, 20, 25] # Å
+        radii = [5, 10, 15, 20, 25] # Å
         
         struc_list, size_list = cif_to_NP(self.cif_dir + '/' + cif, radii)
-        
         ### Simulate spectra
         ## Setup
         # X-ray PDF
@@ -137,82 +146,89 @@ class h5Constructor():
         pdf_neutron_generator.set_parameters(radiationType='N')
         pdf_neutron_generator.genPDFs(self.cif_dir + '/' + cif)
         
-        # Electron PDF
-        pdf_electron_generator = simPDFs()
-        pdf_electron_generator.set_parameters(radiationType='E')
-        pdf_electron_generator.genPDFs(self.cif_dir + '/' + cif)
-        
         # Small Angle Scattering
         q_sas = np.arange(0, 3, 0.01)
         
         # Diffraction
         q_diff = np.arange(1, 30, 0.05)
         
-        ## Simulate spectra
-        for i, np_size in tqdm(enumerate(size_list), desc='Simulating spectra'):
-            # X-ray PDF
-            pdf_xray = pdf_xray_generator.getPDF(particle_size=np_size)
-            
-            # Neutron PDF
-            pdf_neutron = pdf_neutron_generator.getPDF(particle_size=np_size)
-            
-            # Electron PDF
-            pdf_electron = pdf_electron_generator.getPDF(particle_size=np_size)
-            
-            # SAXS
-            saxs = Debye_Calculator_GPU_bins(
-                struc_list[i].get_chemical_symbols(), 
-                np.float16(struc_list[i].get_positions()), 
-                q_sas, 
-                n_bins=10000, 
-                radiationType='X'
-            )
-            
-            # SANS
-            sans = Debye_Calculator_GPU_bins(
-                struc_list[i].get_chemical_symbols(), 
-                np.float16(struc_list[i].get_positions()), 
-                q_sas, 
-                n_bins=10000, 
-                radiationType='N'
-            )
-            
-            # XRD
-            xrd = Debye_Calculator_GPU_bins(
-                struc_list[i].get_chemical_symbols(), 
-                np.float16(struc_list[i].get_positions()), 
-                q_diff, 
-                n_bins=10000, 
-                radiationType='X'
-            )
-            
-            # ND
-            nd = Debye_Calculator_GPU_bins(
-                struc_list[i].get_chemical_symbols(), 
-                np.float16(struc_list[i].get_positions()), 
-                q_diff, 
-                n_bins=10000, 
-                radiationType='N'
-            )
-            
-        
-        # # Construct .h5 file # TODO: Create new h5 structure
-        # with h5py.File(f'{self.save_dir}/graph_{cif[:-4]}.h5', 'w') as h5_file:
-        #     h5_file.create_group()
-        
         # Construct .h5 file
-        with h5py.File(f'{self.save_dir}/graph_{cif[:-4]}.h5', 'w') as h5_file: # TODO: Think about file naming
-            h5_file.create_dataset('Edge Feature Matrix', data=edge_features)
-            h5_file.create_dataset('Node Feature Matrix', data=node_features)
-            h5_file.create_dataset('Edge Directions', data=direction)
-            h5_file.create_dataset('Cell parameters', data=cell_parameters)
-            h5_file.create_dataset('PDF (X-ray)', data=pdf_xray)
-            h5_file.create_dataset('PDF (Neutron)', data=pdf_neutron)
-            h5_file.create_dataset('PDF (Electron)', data=pdf_electron)
-            h5_file.create_dataset('SAXS', data=saxs)
-            h5_file.create_dataset('SANS', data=sans)
-            h5_file.create_dataset('XRD', data=xrd)
-            h5_file.create_dataset('ND', data=nd)
+        with h5py.File(f'{self.save_dir}/{cif[:-4]}.h5', 'w') as h5_file:
+            # Save elements for the graph
+            graph_h5 = h5_file.require_group('GraphElements')
+            graph_h5.create_dataset('NodeFeatures', data=node_features)
+            graph_h5.create_dataset('EdgeFeatures', data=edge_features)
+            graph_h5.create_dataset('EdgeDirections', data=direction)
+            graph_h5.create_dataset('ScaledPositions', data=node_pos_relative)
+            graph_h5.create_dataset('RealPositions', data=node_pos_real)
+            
+            params_h5 = h5_file.require_group('OtherLabels')
+            params_h5.create_dataset('CellParameters', data=cell_parameters)
+            params_h5.create_dataset('CrystalType', data=cif.split('_')[0])
+            params_h5.create_dataset('ElementsPresent', data=np.unique(node_features[:,0]))
+
+            # Save spectra
+            spectra_h5 = h5_file.require_group('Spectra')
+            
+            ## Simulate spectra
+            for i, np_size in tqdm(enumerate(size_list), total=len(size_list), desc='Simulating spectra', leave=False):
+                # Differentiate spectra by size
+                spectra_size_h5 = spectra_h5.require_group(f'{size_list[i]:.2f}Å')
+                spectra_size_h5.create_dataset('NP size (Å)', data=size_list[i])
+                
+                # X-ray PDF
+                pdf_xray = pdf_xray_generator.getPDF(psize=np_size)
+                # Save spectra
+                spectra_size_h5.create_dataset('xPDF', data=pdf_xray)
+                
+                # Neutron PDF
+                pdf_neutron = pdf_neutron_generator.getPDF(psize=np_size)
+                # Save spectra
+                spectra_size_h5.create_dataset('nPDF', data=pdf_neutron)
+                
+                # SAXS
+                saxs = Debye_Calculator_GPU_bins(
+                    struc_list[i].get_chemical_symbols(), 
+                    np.float16(struc_list[i].get_positions()), 
+                    q_sas, 
+                    n_bins=10000, 
+                    radiationType='X'
+                )
+                # Save spectra
+                spectra_size_h5.create_dataset('SAXS', data=np.vstack((q_sas, saxs)))
+                
+                # SANS
+                sans = Debye_Calculator_GPU_bins(
+                    struc_list[i].get_chemical_symbols(), 
+                    np.float16(struc_list[i].get_positions()), 
+                    q_sas, 
+                    n_bins=10000, 
+                    radiationType='N'
+                )
+                # Save spectra
+                spectra_size_h5.create_dataset('SANS', data=np.vstack((q_sas, sans)))
+                
+                # XRD
+                xrd = Debye_Calculator_GPU_bins(
+                    struc_list[i].get_chemical_symbols(), 
+                    np.float16(struc_list[i].get_positions()), 
+                    q_diff, 
+                    n_bins=10000, 
+                    radiationType='X'
+                )
+                # Save spectra
+                spectra_size_h5.create_dataset('XRD', data=np.vstack((q_diff, xrd)))
+                                
+                # ND
+                nd = Debye_Calculator_GPU_bins(
+                    struc_list[i].get_chemical_symbols(), 
+                    np.float16(struc_list[i].get_positions()), 
+                    q_diff, 
+                    n_bins=10000, 
+                    radiationType='N'
+                )
+                # Save spectra
+                spectra_size_h5.create_dataset('ND', data=np.vstack((q_diff, nd)))
     
     def gen_h5s(self, num_processes=cpu_count() - 1, parallelize=True):
         

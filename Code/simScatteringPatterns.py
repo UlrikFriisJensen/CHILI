@@ -11,7 +11,7 @@ from ase.build import make_supercell
 from ase.build.tools import sort as ase_sort
 from scipy.spatial import distance_matrix
 from sklearn.metrics.pairwise import euclidean_distances
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 sys.path.append(os.getcwd())
 random.seed(14)  # 'Random' numbers
@@ -373,7 +373,7 @@ def calculate_distance_matrix(xyz1, xyz2, batch_size=1000):
     n_points1 = xyz1.shape[0]
     n_points2 = xyz2.shape[0]
     distance_matrix = np.zeros((n_points1, n_points2))
-    for i in tqdm(range(0, n_points1, batch_size), desc='Batched distance matrix calculation'):
+    for i in tqdm(range(0, n_points1, batch_size), desc='Batched distance matrix calculation', leave=False):
         batch = xyz1[i:i+batch_size]
         diff = batch[:, np.newaxis, :] - xyz2
         distance_matrix[i:i+batch_size, :] = np.sqrt(np.sum(diff**2, axis=-1))
@@ -414,7 +414,7 @@ def cif_to_NP(filename, radii, sorting=False):
     # List to catch all created NPs
     np_list = []
     size_list = []
-    for r in tqdm(radii, desc='Generating NPs'):
+    for r in tqdm(radii, desc='Generating NPs', leave=False):
         # Construct the NP
         # List to store atom indices to include in NP
         np_cell_indices = []
@@ -477,7 +477,7 @@ if __name__ == '__main__':
             r_constructed, Gr_constructed = generator_PDF.getPDF(psize=psize)
             time_elapsed = default_timer() - timer_start
             print(f'\ngetPDF ({psize:.2f} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
-            plt.plot(r_constructed, Gr_constructed + i*20, label=f'{psize:.2f} Å')
+            plt.plot(r_constructed, Gr_constructed / np.amax(Gr_constructed) + i, label=f'{psize:.2f} Å')
         time2_PDF = default_timer()
         plt.legend(title='NP size')
         plt.savefig(f'../test_PDF_{radiationType}.png')
@@ -493,7 +493,7 @@ if __name__ == '__main__':
         intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='X')
         time_elapsed = default_timer() - timer_start
         print(f'\n(SAXS) Debye_Calculator_GPU_bins ({size_list[i]:.2f} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
-        plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
+        plt.plot(q,intensity / np.amax(intensity) + i, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
     plt.legend(title='NP size')
     plt.savefig('../test_saxs.png')
     
@@ -507,7 +507,7 @@ if __name__ == '__main__':
         intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='N')
         time_elapsed = default_timer() - timer_start
         print(f'\n(SANS) Debye_Calculator_GPU_bins ({size_list[i]:.2f} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
-        plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
+        plt.plot(q,intensity / np.amax(intensity) + i, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
     plt.legend(title='NP size')
     plt.savefig('../test_sans.png')
 
@@ -522,7 +522,7 @@ if __name__ == '__main__':
         intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='X')
         time_elapsed = default_timer() - timer_start
         print(f'\n(XRD) Debye_Calculator_GPU_bins ({size_list[i]:.2f} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
-        plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
+        plt.plot(q,intensity / np.amax(intensity) + i, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
     plt.legend(title='NP size')
     plt.savefig('../test_xrd.png')
     
@@ -536,7 +536,7 @@ if __name__ == '__main__':
         intensity = Debye_Calculator_GPU_bins(atom_list, xyz, q, n_bins=10000, radiationType='N')
         time_elapsed = default_timer() - timer_start
         print(f'\n(ND) Debye_Calculator_GPU_bins ({size_list[i]:.2f} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
-        plt.plot(q,intensity, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
+        plt.plot(q,intensity / np.amax(intensity) + i, label=f'{radii[i]} Å ({size_list[i]:.2f} Å)')
     plt.legend(title='NP size')
     plt.savefig('../test_nd.png')
 

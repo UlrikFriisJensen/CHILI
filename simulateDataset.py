@@ -2,7 +2,7 @@
 
 # Standard imports
 from pathlib import Path
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 # Import local functions
 from Code.cifSimulation import structureGenerator
