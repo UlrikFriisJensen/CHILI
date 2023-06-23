@@ -364,31 +364,39 @@ def Debye_Calculator_GPU_bins(atom_list, xyz, q, radiationType, n_bins=1000):
         # Multiply sinc functions by the histogram and sum the result
         intensity_gpu[i] = cp.sum(dist_hist[i] * sinc_gpu[i])
 
-    # Transfer result back to CPU
-    intensity = cp.asnumpy(intensity_gpu)
+    return cp.asnumpy(intensity_gpu) # Transfer result back to CPU
 
-    return intensity
-
-def calculate_distance_matrix(xyz1, xyz2, batch_size=1000):
-    n_points1 = xyz1.shape[0]
-    n_points2 = xyz2.shape[0]
-    distance_matrix = np.zeros((n_points1, n_points2))
-    for i in tqdm(range(0, n_points1, batch_size), desc='Batched distance matrix calculation', leave=False):
-        batch = xyz1[i:i+batch_size]
-        diff = batch[:, np.newaxis, :] - xyz2
-        distance_matrix[i:i+batch_size, :] = np.sqrt(np.sum(diff**2, axis=-1))
-        del batch
-        del diff
+def calculate_distance_matrix(xyz1, xyz2=None, batch_size=1000):
+    if xyz2:
+        n_points1 = xyz1.shape[0]
+        n_points2 = xyz2.shape[0]
+        # xyz1 = cp.asarray(xyz1)
+        # xyz2 = cp.asarray(xyz2)
+        distance_matrix = cp.zeros((n_points1, n_points2))
+        for i in tqdm(range(0, n_points1, batch_size), desc='Batched distance matrix calculation', leave=False):
+            batch = xyz1[i:i+batch_size]
+            diff = batch[:, np.newaxis, :] - xyz2
+            distance_matrix[i:i+batch_size, :] = cp.sqrt(cp.sum(diff**2, axis=-1))
+            # del batch
+            # del diff
+    else:
+        n_points1 = xyz1.shape[0]
+        # xyz1 = cp.asarray(xyz1)
+        distance_matrix = cp.zeros((n_points1, n_points1))
+        for i in tqdm(range(0, n_points1, batch_size), desc='Batched distance matrix calculation', leave=False):
+            batch = xyz1[i:i+batch_size]
+            diff = batch[:, np.newaxis, :] - xyz1
+            distance_matrix[i:i+batch_size, :] = cp.sqrt(cp.sum(diff**2, axis=-1))
     return distance_matrix
 
-def cif_to_NP(filename, radii, sorting=False):
+def cif_to_NP_GPU(filename, radii, sorting=False):
     # Load cif file
     unit_cell = read(filename)
     # Get cell dimensions
     cell_dims = np.array(unit_cell.cell.cellpar()[:3])
     # Construct expansion matrix
     r_max = np.amax(radii)
-    P = np.diag(((r_max // cell_dims) + 2) * 2)
+    P = np.diag((np.ceil(r_max / cell_dims)) * 2)
     # Expand cell
     cell = make_supercell(prim=unit_cell, P=P)
     n_atoms = len(cell)
@@ -399,16 +407,17 @@ def cif_to_NP(filename, radii, sorting=False):
     # Snap cell origo to closest metal
     cell.positions = cell.get_positions() - cell.get_positions()[atoms != 'O'][np.argmin(np.linalg.norm(cell.get_positions()[atoms != 'O'], ord=2, axis=1))]
     # Get the coordinates
-    coords = np.float16(np.array(cell.get_positions()))
+    coords = cp.asarray(cell.get_positions(), dtype=cp.float16)
     # Atom type filters
     metal_filter = atoms != 'O'
     # Distance matrix of all metals
     if n_atoms <= 5000:
-        metal_dist_matrix = distance_matrix(coords[metal_filter], coords[metal_filter])
+        metal_dist_matrix = cp.sqrt(cp.sum((coords[metal_filter][:, cp.newaxis, :] - coords[metal_filter])**2, axis=-1))
     else:
-        metal_dist_matrix = calculate_distance_matrix(coords[metal_filter], coords[metal_filter])
+        metal_dist_matrix = calculate_distance_matrix(coords[metal_filter])
     # Minimum metal-metal distance
-    min_metal_dist = np.unique(metal_dist_matrix)[1]
+    nonzero_mask = (metal_dist_matrix != 0)
+    min_metal_dist = cp.asnumpy(cp.amin(metal_dist_matrix[nonzero_mask]))
     # Remove the distance matrix to free up RAM
     del metal_dist_matrix
     # List to catch all created NPs
@@ -425,11 +434,11 @@ def cif_to_NP(filename, radii, sorting=False):
                 np_cell_indices.append(i)
         # Calculate distance from all included metals to all other atoms
         if len(np_cell_indices) <= 5000:
-            oxygen_dist_matrix = distance_matrix(coords[np_cell_indices], coords)
+            oxygen_dist_matrix = cp.sqrt(cp.sum((coords[np_cell_indices][:, cp.newaxis, :] - coords)**2, axis=-1))
         else:
             oxygen_dist_matrix = calculate_distance_matrix(coords[np_cell_indices], coords)
         # Find indices of all the atoms within the minimum metal distance
-        np_cell_indices.extend(np.argwhere(oxygen_dist_matrix < min_metal_dist)[:,1])
+        np_cell_indices.extend(cp.asnumpy(cp.argwhere(oxygen_dist_matrix < min_metal_dist)[:,1]))
         # Remove the distance matrix to free up RAM
         del oxygen_dist_matrix
         # Use only the unique indices
@@ -437,10 +446,12 @@ def cif_to_NP(filename, radii, sorting=False):
         # Select the atoms to include in the NP
         np_cell = cell[np_cell_indices]
         # Find size of NP
+        cell_positions = cp.asarray(np_cell.get_positions(), dtype=cp.float16)
         if len(np_cell) <= 5000:
-            np_size = np.amax(distance_matrix(np_cell.get_positions(), np_cell.get_positions()))
+            np_size = cp.asnumpy(cp.amax(cp.sqrt(cp.sum((cell_positions[:, cp.newaxis, :] - cell_positions)**2, axis=-1))))
         else:
-            np_size = np.amax(calculate_distance_matrix(np_cell.get_positions(), np_cell.get_positions()))
+            np_size = cp.asnumpy(cp.amax(calculate_distance_matrix(cell_positions)))
+        del cell_positions
         # Sort atoms
         if sorting:
             np_cell = ase_sort(np_cell)
@@ -459,9 +470,9 @@ if __name__ == '__main__':
     radii = [5, 10, 25] # Å
     # Cut out the NPs
     timer_start = default_timer()
-    struc_list, size_list = cif_to_NP(CIF_file, radii)
+    struc_list, size_list = cif_to_NP_GPU(CIF_file, radii)
     time_elapsed = default_timer() - timer_start
-    print(f'\ncif_to_NP ({radii} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
+    print(f'\ncif_to_NP_GPU ({radii} Å)\nTime: {time_elapsed:{".2f" if time_elapsed > 0.1 else ".2e"}} s')
     
     # Simulate a Pair Distribution Function - on CPU
     for radiationType in ['X', 'N']:
