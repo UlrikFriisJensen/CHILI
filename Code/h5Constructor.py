@@ -18,7 +18,7 @@ from networkx import draw
 from ase.io import write, read
 from ase.build import make_supercell
 from ase.neighborlist import neighbor_list, natural_cutoffs
-from Code.simScatteringPatterns import simPDFs, cif_to_NP, Debye_Calculator_GPU_bins
+from Code.simScatteringPatterns import simPDFs, cif_to_NP_GPU, Debye_Calculator_GPU_bins
 
 #%% Graph construction
 
@@ -134,7 +134,7 @@ class h5Constructor():
         # Construct discrete particles for simulation of spectra
         radii = [5, 10, 15, 20, 25] # Å
         
-        struc_list, size_list = cif_to_NP(self.cif_dir + '/' + cif, radii)
+        struc_list, size_list = cif_to_NP_GPU(self.cif_dir + '/' + cif, radii)
         ### Simulate spectra
         ## Setup
         # X-ray PDF
