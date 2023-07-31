@@ -79,6 +79,7 @@ class InOrgMatDatasets(Dataset):
                     target_dict = dict(
                         crystal_type = crystal_type,
                         atomic_species = atomic_species,
+                        n_atomic_species = len(atomic_species),
                         cell_params = cell_params,
                         np_size = h5f['Spectra'][key]['NP size (Å)'][()],
                         nd = torch.tensor(h5f['Spectra'][key]['ND'][:], dtype=torch.float32),
