@@ -163,4 +163,5 @@ cython_debug/
 *.code-workspace
 Dataset/DatasetTest/
 Dataset/h5/
+Dataset/CIFs/ICSD_MonoMetalOxides/
 test*.png
