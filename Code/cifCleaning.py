@@ -1,6 +1,7 @@
 #%% Imports
 
 import numpy as np
+import pandas as pd
 from pathlib import Path
 import shutil
 from tqdm.auto import tqdm
@@ -88,9 +89,10 @@ def fix_parenthesis_error(cif, err):
         print('{}'.format(line), end='')
     return None
 
-def clean_cif(cif):
+def clean_cif(cif, debug=False):
     clean = False
     error_report = dict(removed=0, loop_error=0, precision_error=0, parenthesis_error=0)
+    cif_metadata = dict()
     while not clean:
         try:
             with warnings.catch_warnings():
@@ -98,12 +100,23 @@ def clean_cif(cif):
                 atoms = read(cif, format='cif')
                 error_report['precision_error'] = fix_precision_errors(cif)
                 clean = True
+                cif_metadata['Spacegroup'] = [atoms.info['spacegroup'].no]
+                cif_metadata['Elements'] = [np.unique(atoms.get_atomic_numbers())]
         except AssertionError as err:
             lines = list(iter_exc_lines(err))
             if any("line.lower().startswith('data_')" in line for line in lines):
                 Path(cif).unlink()
                 error_report['removed'] += 1
                 break
+            else:
+                if debug:
+                    print(cif)
+                    print('\n')
+                    print(err)
+                    return True, error_report, cif_metadata
+                else:
+                    Path(cif).unlink()
+                    error_report['removed'] += 1
         except StopIteration as err:
             Path(cif).unlink()
             error_report['removed'] += 1
@@ -115,32 +128,67 @@ def clean_cif(cif):
                 error_report['removed'] += 1
                 break
             else:
-                print(cif)
-                print('\n')
-                print(err)
+                if debug:
+                    print(cif)
+                    print('\n')
+                    print(err)
+                    return True, error_report, cif_metadata
+                else:
+                    Path(cif).unlink()
+                    error_report['removed'] += 1
         except RuntimeError as err:
             lines = list(iter_exc_lines(err))
             if any("CIF loop ended unexpectedly with incomplete row" in line for line in lines):
                 fix_loop_error(cif, err)
                 error_report['loop_error'] += 1
+            else:
+                if debug:
+                    print(cif)
+                    print('\n')
+                    print(err)
+                    return True, error_report, cif_metadata
+                else:
+                    Path(cif).unlink()
+                    error_report['removed'] += 1
         except ValueError as err:
             lines = list(iter_exc_lines(err))
             if any("could not convert string to float" in line for line in lines):
                 fix_parenthesis_error(cif, err)
                 error_report['parenthesis_error'] += 1
+            else:
+                if debug:
+                    print(cif)
+                    print('\n')
+                    print(err)
+                    return True, error_report, cif_metadata
+                else:
+                    Path(cif).unlink()
+                    error_report['removed'] += 1
         except Exception as err:
-            lines = list(iter_exc_lines(err))
-            print(cif)
-            print('\n')
-            print(err)
-            print('\n')        
-            for line in lines:
-                print(line)
-            return True, error_report
+            if debug:
+                lines = list(iter_exc_lines(err))
+                print(cif)
+                print('\n')
+                print(err)
+                print('\n')        
+                for line in lines:
+                    print(line)
+                return True, error_report, cif_metadata
+            else:
+                Path(cif).unlink()
+                error_report['removed'] += 1
     
-    return False, error_report
+    return False, error_report, cif_metadata
 
-def remove_duplicate_cifs(cif_folder):
+def remove_duplicate_cifs(cif_folder, metadata):
+    # Compare several attributes to determine whether duplicates are present
+    
+    # Atom species
+    # Crystal system
+    # Spacegroup
+    
+    # Atom positions
+    # Cell parameters
     return None
 
 def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, verbose=True):
@@ -156,10 +204,15 @@ def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, 
     
     error_summary = dict(removed=0, loop_error=0, precision_error=0, parenthesis_error=0)
     
+    df_metadata = pd.DataFrame()
+    
     for cif in tqdm(cifs, desc='Cleaning CIFs'):
         shutil.copy(cif_folder + cif, save_folder + cif)
-        stop_loop, error_report = clean_cif(save_folder + cif)
+        stop_loop, error_report, cif_metadata = clean_cif(save_folder + cif)
         
+        if remove_duplicates:
+            df_metadata = pd.concat([df_metadata, pd.DataFrame.from_dict(cif_metadata)], ignore_index=True)
+
         for key in error_report:
             error_summary[key] += error_report[key]
         
@@ -169,10 +222,10 @@ def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, 
     if verbose:
         print('Summary of corrected errors in cif dataset\n')
         for key in error_summary:
-            print(f'\t{key}: {error_summary[key]}')
+            print(f'\t{key.capitalize().replace("_", " ")}: {error_summary[key]}')
     
     if remove_duplicates:
-        remove_duplicate_cifs(save_folder)
+        remove_duplicate_cifs(save_folder, df_metadata)
     
     
-    return None
+    return df_metadata
