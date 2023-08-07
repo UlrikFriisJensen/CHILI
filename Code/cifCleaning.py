@@ -8,6 +8,7 @@ import fileinput
 import warnings
 from ase.io import read
 from traceback_with_variables import iter_exc_lines
+from fractions import Fraction
 
 #%% Functions
 
@@ -43,8 +44,33 @@ def fix_loop_error(cif, err):
             print('{}'.format(line), end='')
     return None
 
-def fix_truncation_error():
-    return None
+def fix_precision_errors(cif, precision=5):
+    atom_positions = False
+    error_count = 0
+    for line in fileinput.input(cif, inplace=True):
+        if atom_positions:
+            word_list = []
+            for word in line.split(' '):
+                try:
+                    number = float(word.replace('(', '').replace(')', ''))
+                    # Test if the number is a numerical approximation of a fraction
+                    fraction = Fraction(number).limit_denominator(max_denominator=1000)
+                    if (fraction.denominator <=10) and fraction.denominator !=1:
+                        number = np.around(float(fraction), precision)
+                        word_list.append(str(number))
+                        if len(word_list[-1]) != len(word):
+                            error_count += 1
+                    else:
+                        word_list.append(word)
+                except:
+                    word_list.append(word)
+                    continue
+            line = ' '.join(word_list)
+        else:
+            if '_atom_site_label' in line:
+                atom_positions = True
+        print('{}'.format(line), end='')
+    return error_count
 
 def fix_parenthesis_error(cif, err):
     lines = list(iter_exc_lines(err))
@@ -63,14 +89,15 @@ def fix_parenthesis_error(cif, err):
     return None
 
 def clean_cif(cif):
-    cleaning = True
-    error_report = dict(removed=0, loop_error=0, truncation_error=0, parenthesis_error=0)
-    while cleaning:
+    clean = False
+    error_report = dict(removed=0, loop_error=0, precision_error=0, parenthesis_error=0)
+    while not clean:
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 atoms = read(cif, format='cif')
-                cleaning = False
+                error_report['precision_error'] = fix_precision_errors(cif)
+                clean = True
         except AssertionError as err:
             lines = list(iter_exc_lines(err))
             if any("line.lower().startswith('data_')" in line for line in lines):
@@ -127,7 +154,7 @@ def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, 
     
     cifs = [str(file.name) for file in Path(cif_folder).glob('*.cif')]
     
-    error_summary = dict(removed=0, loop_error=0, truncation_error=0, parenthesis_error=0)
+    error_summary = dict(removed=0, loop_error=0, precision_error=0, parenthesis_error=0)
     
     for cif in tqdm(cifs, desc='Cleaning CIFs'):
         shutil.copy(cif_folder + cif, save_folder + cif)
