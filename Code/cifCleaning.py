@@ -89,15 +89,20 @@ def fix_parenthesis_error(cif, err):
         print('{}'.format(line), end='')
     return None
 
-def clean_cif(cif, debug=True):
+def clean_cif(cif, unwanted_atoms=None, debug=False):
     clean = False
-    error_report = dict(removed=0, loop_error=0, precision_error=0, parenthesis_error=0)
+    error_report = dict(removed=0, loop_error=0, precision_error=0, parenthesis_error=0, unwanted_atom=0)
     cif_metadata = dict()
     while not clean:
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 atoms = read(cif, format='cif')
+                if unwanted_atoms:
+                    if any([atom in unwanted_atoms for atom in atoms.get_atomic_numbers()]):
+                        Path(cif).unlink()
+                        error_report['unwanted_atom'] += 1
+                        break
                 error_report['precision_error'] = fix_precision_errors(cif)
                 clean = True
                 cif_metadata['filepath'] = cif
@@ -119,6 +124,7 @@ def clean_cif(cif, debug=True):
                 else:
                     Path(cif).unlink()
                     error_report['removed'] += 1
+                    break
         except StopIteration as err:
             Path(cif).unlink()
             error_report['removed'] += 1
@@ -138,6 +144,7 @@ def clean_cif(cif, debug=True):
                 else:
                     Path(cif).unlink()
                     error_report['removed'] += 1
+                    break
         except RuntimeError as err:
             lines = list(iter_exc_lines(err))
             if any("CIF loop ended unexpectedly with incomplete row" in line for line in lines):
@@ -152,6 +159,7 @@ def clean_cif(cif, debug=True):
                 else:
                     Path(cif).unlink()
                     error_report['removed'] += 1
+                    break
         except ValueError as err:
             lines = list(iter_exc_lines(err))
             if any("could not convert string to float" in line for line in lines):
@@ -166,6 +174,7 @@ def clean_cif(cif, debug=True):
                 else:
                     Path(cif).unlink()
                     error_report['removed'] += 1
+                    break
         except Exception as err:
             if debug:
                 lines = list(iter_exc_lines(err))
@@ -179,6 +188,7 @@ def clean_cif(cif, debug=True):
             else:
                 Path(cif).unlink()
                 error_report['removed'] += 1
+                break
     
     return False, error_report, cif_metadata
 
@@ -204,7 +214,7 @@ def remove_duplicate_cifs(metadata):
     
     return None
 
-def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, verbose=True):
+def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, verbose=True, cod=False, unwanted_atoms=None):
     
     if save_folder is None:
         save_folder = cif_folder[:-1] + '_cleaned/'
@@ -212,16 +222,22 @@ def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, 
     if not Path(save_folder).exists():
         Path(save_folder).mkdir(parents=True)
 
+    if cod:
+        cifs = [str(file)[len(cif_folder):] for file in Path(cif_folder).rglob('*.cif')]
+    else:
+        cifs = [str(file.name) for file in Path(cif_folder).glob('*.cif')]
     
-    cifs = [str(file.name) for file in Path(cif_folder).glob('*.cif')]
-    
-    error_summary = dict(removed=0, loop_error=0, precision_error=0, parenthesis_error=0)
+    error_summary = dict(removed=0, loop_error=0, precision_error=0, parenthesis_error=0, unwanted_atom=0)
     
     df_metadata = pd.DataFrame()
-    
+    # parellelize
     for cif in tqdm(cifs, desc='Cleaning CIFs'):
+        if cod:
+            subfolder = '/'.join((save_folder + cif).split('/')[:-1]) + '/'
+            if not Path(subfolder).exists():
+                Path(subfolder).mkdir(parents=True)
         shutil.copy(cif_folder + cif, save_folder + cif)
-        stop_loop, error_report, cif_metadata = clean_cif(save_folder + cif)
+        stop_loop, error_report, cif_metadata = clean_cif(save_folder + cif, unwanted_atoms)
         
         if remove_duplicates:
             df_metadata = pd.concat([df_metadata, pd.DataFrame.from_dict(cif_metadata)], ignore_index=True)
