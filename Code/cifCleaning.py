@@ -89,7 +89,7 @@ def fix_parenthesis_error(cif, err):
         print('{}'.format(line), end='')
     return None
 
-def clean_cif(cif, debug=False):
+def clean_cif(cif, debug=True):
     clean = False
     error_report = dict(removed=0, loop_error=0, precision_error=0, parenthesis_error=0)
     cif_metadata = dict()
@@ -100,8 +100,10 @@ def clean_cif(cif, debug=False):
                 atoms = read(cif, format='cif')
                 error_report['precision_error'] = fix_precision_errors(cif)
                 clean = True
+                cif_metadata['filepath'] = cif
                 cif_metadata['Spacegroup'] = [atoms.info['spacegroup'].no]
-                cif_metadata['Elements'] = [np.unique(atoms.get_atomic_numbers())]
+                for i, element in enumerate(np.unique(atoms.get_atomic_numbers())):
+                    cif_metadata[f'Element{i}'] = element
         except AssertionError as err:
             lines = list(iter_exc_lines(err))
             if any("line.lower().startswith('data_')" in line for line in lines):
@@ -180,15 +182,26 @@ def clean_cif(cif, debug=False):
     
     return False, error_report, cif_metadata
 
-def remove_duplicate_cifs(cif_folder, metadata):
+def remove_duplicate_cifs(metadata):
     # Compare several attributes to determine whether duplicates are present
     
+    # Easy parameters to check (Quick filter)
     # Atom species
     # Crystal system
     # Spacegroup
+    metadata_noDuplicates = metadata.drop_duplicates(subset=metadata.columns[metadata.columns != 'filepath'], keep='first')
     
+    # Detailed check but harder (Detailed filter)
     # Atom positions
     # Cell parameters
+    
+    # Remove files no longer in the dataset
+    for cif in metadata['filepath']:
+        if cif not in metadata_noDuplicates['filepath'].to_list():
+            Path(cif).unlink()
+    
+    print(f'Duplicate CIFs removed!\n{len(metadata)} CIFs --> {len(metadata_noDuplicates)} CIFs')
+    
     return None
 
 def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, verbose=True):
@@ -223,9 +236,9 @@ def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, 
         print('Summary of corrected errors in cif dataset\n')
         for key in error_summary:
             print(f'\t{key.capitalize().replace("_", " ")}: {error_summary[key]}')
+        print('\n')
     
     if remove_duplicates:
-        remove_duplicate_cifs(save_folder, df_metadata)
-    
+        remove_duplicate_cifs(df_metadata)
     
     return df_metadata
