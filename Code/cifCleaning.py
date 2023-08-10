@@ -10,6 +10,8 @@ import warnings
 from ase.io import read
 from traceback_with_variables import iter_exc_lines
 from fractions import Fraction
+from multiprocessing import Pool, cpu_count
+from itertools import repeat
 
 #%% Functions
 
@@ -89,10 +91,13 @@ def fix_parenthesis_error(cif, err):
         print('{}'.format(line), end='')
     return None
 
-def clean_cif(cif, unwanted_atoms=None, debug=False):
+def clean_cif(input_tuple, debug=False):
+    cif, cif_folder, save_folder, unwanted_atoms = input_tuple
     clean = False
     error_report = dict(removed=0, loop_error=0, precision_error=0, parenthesis_error=0, unwanted_atom=0)
     cif_metadata = dict()
+    shutil.copy(cif_folder + cif, save_folder + cif)
+    cif = save_folder + cif
     while not clean:
         try:
             with warnings.catch_warnings():
@@ -120,7 +125,7 @@ def clean_cif(cif, unwanted_atoms=None, debug=False):
                     print(cif)
                     print('\n')
                     print(err)
-                    return True, error_report, cif_metadata
+                    return error_report, cif_metadata
                 else:
                     Path(cif).unlink()
                     error_report['removed'] += 1
@@ -140,7 +145,7 @@ def clean_cif(cif, unwanted_atoms=None, debug=False):
                     print(cif)
                     print('\n')
                     print(err)
-                    return True, error_report, cif_metadata
+                    return error_report, cif_metadata
                 else:
                     Path(cif).unlink()
                     error_report['removed'] += 1
@@ -155,7 +160,7 @@ def clean_cif(cif, unwanted_atoms=None, debug=False):
                     print(cif)
                     print('\n')
                     print(err)
-                    return True, error_report, cif_metadata
+                    return error_report, cif_metadata
                 else:
                     Path(cif).unlink()
                     error_report['removed'] += 1
@@ -170,7 +175,7 @@ def clean_cif(cif, unwanted_atoms=None, debug=False):
                     print(cif)
                     print('\n')
                     print(err)
-                    return True, error_report, cif_metadata
+                    return error_report, cif_metadata
                 else:
                     Path(cif).unlink()
                     error_report['removed'] += 1
@@ -184,13 +189,13 @@ def clean_cif(cif, unwanted_atoms=None, debug=False):
                 print('\n')        
                 for line in lines:
                     print(line)
-                return True, error_report, cif_metadata
+                return error_report, cif_metadata
             else:
                 Path(cif).unlink()
                 error_report['removed'] += 1
                 break
     
-    return False, error_report, cif_metadata
+    return error_report, cif_metadata
 
 def remove_duplicate_cifs(metadata):
     # Compare several attributes to determine whether duplicates are present
@@ -214,7 +219,7 @@ def remove_duplicate_cifs(metadata):
     
     return None
 
-def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, verbose=True, cod=False, unwanted_atoms=None):
+def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, verbose=True, unwanted_atoms=None, n_processes=cpu_count() - 1):
     
     if save_folder is None:
         save_folder = cif_folder[:-1] + '_cleaned/'
@@ -222,31 +227,32 @@ def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, 
     if not Path(save_folder).exists():
         Path(save_folder).mkdir(parents=True)
 
-    if cod:
-        cifs = [str(file)[len(cif_folder):] for file in Path(cif_folder).rglob('*.cif')]
-    else:
-        cifs = [str(file.name) for file in Path(cif_folder).glob('*.cif')]
+    # if cod:
+    # cifs = [str(file)[len(cif_folder):] for file in Path(cif_folder).rglob('*.cif')]
+    # else:
+    cifs = [str(file.name) for file in Path(cif_folder).glob('*.cif')]
     
     error_summary = dict(removed=0, loop_error=0, precision_error=0, parenthesis_error=0, unwanted_atom=0)
     
     df_metadata = pd.DataFrame()
     # parellelize
-    for cif in tqdm(cifs, desc='Cleaning CIFs'):
-        if cod:
-            subfolder = '/'.join((save_folder + cif).split('/')[:-1]) + '/'
-            if not Path(subfolder).exists():
-                Path(subfolder).mkdir(parents=True)
-        shutil.copy(cif_folder + cif, save_folder + cif)
-        stop_loop, error_report, cif_metadata = clean_cif(save_folder + cif, unwanted_atoms)
-        
-        if remove_duplicates:
-            df_metadata = pd.concat([df_metadata, pd.DataFrame.from_dict(cif_metadata)], ignore_index=True)
+    inputs = zip(cifs, repeat(cif_folder), repeat(save_folder), repeat(unwanted_atoms))
+    with Pool(processes=n_processes) as pool:
+        with tqdm(total=len(cifs), desc='Cleaning CIFs') as pbar:
+            for error_report, cif_metadata in pool.imap_unordered(clean_cif, inputs, chunksize=10):
+                # if cod:
+                #     subfolder = '/'.join((save_folder + cif).split('/')[:-1]) + '/'
+                #     if not Path(subfolder).exists():
+                #         Path(subfolder).mkdir(parents=True)
+                # stop_loop, error_report, cif_metadata = clean_cif(save_folder + cif, unwanted_atoms)
+                if remove_duplicates:
+                    df_metadata = pd.concat([df_metadata, pd.DataFrame.from_dict(cif_metadata)], ignore_index=True)
 
-        for key in error_report:
-            error_summary[key] += error_report[key]
-        
-        if stop_loop:
-            break
+                for key in error_report:
+                    error_summary[key] += error_report[key]
+                
+                pbar.update()
+        pbar.close()
     
     if verbose:
         print('Summary of corrected errors in cif dataset\n')

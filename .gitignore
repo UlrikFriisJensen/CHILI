@@ -164,4 +164,5 @@ cython_debug/
 Dataset/DatasetTest/
 Dataset/h5/
 Dataset/CIFs/ICSD*/
-test*.png
+Dataset/CIFs/COD*/
+test*.*
