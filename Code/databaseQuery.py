@@ -5,6 +5,7 @@ import requests
 import zipfile
 import io
 from itertools import islice
+from tqdm.auto import tqdm
 
 #%% Functions
 
@@ -37,15 +38,32 @@ def queryCOD(save_folder, included_atoms=None, excluded_atoms=None, batch_size=8
         
     with open(f'{save_folder}cif_IDs.txt', 'r') as file:
         ids = file.readlines()
-        for id_batch in batched(ids, batch_size):
-            requested_ids = ''.join(id_batch)
-        
-            # Request cif files
-            api_url = f'https://www.crystallography.net/cod/result?format=zip&id={requested_ids}'
-            response = requests.get(api_url)
-            # Extract requested cif files
-            zip_file = zipfile.ZipFile(io.BytesIO(response.content))
-            zip_file.extractall(save_folder)
+        with tqdm(total=len(ids), desc='Downloading CIFs') as pbar:
+            for id_batch in batched(ids, batch_size):
+                try:
+                    requested_ids = ''.join(id_batch)
+                
+                    # Request cif files
+                    api_url = f'https://www.crystallography.net/cod/result?format=zip&id={requested_ids}'
+                    response = requests.get(api_url)
+                    # Extract requested cif files
+                    zip_file = zipfile.ZipFile(io.BytesIO(response.content))
+                    zip_file.extractall(save_folder)
+                    
+                    pbar.update(n=len(id_batch))
+                except requests.exceptions.ConnectionError:
+                    print('Exception caught')
+                    for id_sub_batch in batched(id_batch, batch_size // 10):
+                        requested_ids = ''.join(id_sub_batch)
+                        
+                        # Request cif files
+                        api_url = f'https://www.crystallography.net/cod/result?format=zip&id={requested_ids}'
+                        response = requests.get(api_url)
+                        # Extract requested cif files
+                        zip_file = zipfile.ZipFile(io.BytesIO(response.content))
+                        zip_file.extractall(save_folder)
+                        
+                        pbar.update(n=len(id_sub_batch))
             
     Path(f'{save_folder}cif_IDs.txt').unlink()
     
@@ -54,7 +72,7 @@ def queryCOD(save_folder, included_atoms=None, excluded_atoms=None, batch_size=8
 if __name__ == '__main__':
     from cifCleaning import cif_cleaning_pipeline
     
-    cif_folder = '../Dataset/CIFs/COD_subset'
+    cif_folder = '../Dataset/CIFs/COD_subset/'
     included_atoms = None
     excluded_atoms = ['C']
     

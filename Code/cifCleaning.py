@@ -109,11 +109,11 @@ def clean_cif(input_tuple, debug=False):
                         error_report['unwanted_atom'] += 1
                         break
                 error_report['precision_error'] = fix_precision_errors(cif)
-                clean = True
                 cif_metadata['filepath'] = cif
                 cif_metadata['Spacegroup'] = [atoms.info['spacegroup'].no]
                 for i, element in enumerate(np.unique(atoms.get_atomic_numbers())):
                     cif_metadata[f'Element{i}'] = element
+                clean = True
         except AssertionError as err:
             lines = list(iter_exc_lines(err))
             if any("line.lower().startswith('data_')" in line for line in lines):
@@ -194,7 +194,8 @@ def clean_cif(input_tuple, debug=False):
                 Path(cif).unlink()
                 error_report['removed'] += 1
                 break
-    
+    if not clean:
+        cif_metadata = dict()
     return error_report, cif_metadata
 
 def remove_duplicate_cifs(metadata):
@@ -246,13 +247,15 @@ def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, 
                 #         Path(subfolder).mkdir(parents=True)
                 # stop_loop, error_report, cif_metadata = clean_cif(save_folder + cif, unwanted_atoms)
                 if remove_duplicates:
-                    df_metadata = pd.concat([df_metadata, pd.DataFrame.from_dict(cif_metadata)], ignore_index=True)
-
+                    try:
+                        df_metadata = pd.concat([df_metadata, pd.DataFrame.from_dict(cif_metadata)], ignore_index=True)
+                    except ValueError as err:
+                        print(cif_metadata)
+                        raise err
                 for key in error_report:
                     error_summary[key] += error_report[key]
                 
                 pbar.update()
-        pbar.close()
     
     if verbose:
         print('Summary of corrected errors in cif dataset\n')
