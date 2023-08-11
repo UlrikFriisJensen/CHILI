@@ -12,6 +12,7 @@ from traceback_with_variables import iter_exc_lines
 from fractions import Fraction
 from multiprocessing import Pool, cpu_count
 from itertools import repeat
+from stopit import TimeoutException, ThreadingTimeout as Timeout
 
 #%% Functions
 
@@ -39,7 +40,7 @@ def fix_loop_error(cif, err):
             break
 
     if insert_found:
-        for line in fileinput.input(cif, inplace=True):
+        for line in fileinput.FileInput(cif, inplace=True):
             if np.all([a[1:-1] in line for a in array]):
                 line = line[:-4]
                 line += insert
@@ -50,7 +51,7 @@ def fix_loop_error(cif, err):
 def fix_precision_errors(cif, precision=5):
     atom_positions = False
     error_count = 0
-    for line in fileinput.input(cif, inplace=True):
+    for line in fileinput.FileInput(cif, inplace=True):
         if atom_positions:
             word_list = []
             for word in line.split(' '):
@@ -60,9 +61,11 @@ def fix_precision_errors(cif, precision=5):
                     fraction = Fraction(number).limit_denominator(max_denominator=1000)
                     if (fraction.denominator <=10) and fraction.denominator !=1:
                         number = np.around(float(fraction), precision)
-                        word_list.append(str(number))
-                        if len(word_list[-1]) != len(word):
+                        if len(str(number)) > len(word):
+                            word_list.append(str(number))
                             error_count += 1
+                        else:
+                            word_list.append(word)
                     else:
                         word_list.append(word)
                 except:
@@ -85,7 +88,7 @@ def fix_parenthesis_error(cif, err):
     elif ('(' in invalid_number) and (')' not in invalid_number):
         valid_number = invalid_number + ')'
 
-    for line in fileinput.input(cif, inplace=True):
+    for line in fileinput.FileInput(cif, inplace=True):
         if invalid_number in line:
             line = line.replace(invalid_number, valid_number)
         print('{}'.format(line), end='')
@@ -94,106 +97,112 @@ def fix_parenthesis_error(cif, err):
 def clean_cif(input_tuple, debug=False):
     cif, cif_folder, save_folder, unwanted_atoms = input_tuple
     clean = False
-    error_report = dict(removed=0, loop_error=0, precision_error=0, parenthesis_error=0, unwanted_atom=0)
+    error_report = dict(removed=0, loop_error=0, precision_error=0, parenthesis_error=0, unwanted_atom=0, timeout=0)
     cif_metadata = dict()
     shutil.copy(cif_folder + cif, save_folder + cif)
     cif = save_folder + cif
-    while not clean:
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore')
-                atoms = read(cif, format='cif')
-                if unwanted_atoms:
-                    if any([atom in unwanted_atoms for atom in atoms.get_atomic_numbers()]):
-                        Path(cif).unlink()
-                        error_report['unwanted_atom'] += 1
-                        break
-                error_report['precision_error'] = fix_precision_errors(cif)
-                cif_metadata['filepath'] = cif
-                cif_metadata['Spacegroup'] = [atoms.info['spacegroup'].no]
-                for i, element in enumerate(np.unique(atoms.get_atomic_numbers())):
-                    cif_metadata[f'Element{i}'] = element
-                clean = True
-        except AssertionError as err:
-            lines = list(iter_exc_lines(err))
-            if any("line.lower().startswith('data_')" in line for line in lines):
-                Path(cif).unlink()
-                error_report['removed'] += 1
-                break
-            else:
-                if debug:
-                    print(cif)
-                    print('\n')
-                    print(err)
-                    return error_report, cif_metadata
-                else:
-                    Path(cif).unlink()
-                    error_report['removed'] += 1
-                    break
-        except StopIteration as err:
-            Path(cif).unlink()
-            error_report['removed'] += 1
-            break
-        except IndexError as err:
-            lines = list(iter_exc_lines(err))
-            if any("pop from empty list" in line for line in lines):
-                Path(cif).unlink()
-                error_report['removed'] += 1
-                break
-            else:
-                if debug:
-                    print(cif)
-                    print('\n')
-                    print(err)
-                    return error_report, cif_metadata
-                else:
-                    Path(cif).unlink()
-                    error_report['removed'] += 1
-                    break
-        except RuntimeError as err:
-            lines = list(iter_exc_lines(err))
-            if any("CIF loop ended unexpectedly with incomplete row" in line for line in lines):
-                fix_loop_error(cif, err)
-                error_report['loop_error'] += 1
-            else:
-                if debug:
-                    print(cif)
-                    print('\n')
-                    print(err)
-                    return error_report, cif_metadata
-                else:
-                    Path(cif).unlink()
-                    error_report['removed'] += 1
-                    break
-        except ValueError as err:
-            lines = list(iter_exc_lines(err))
-            if any("could not convert string to float" in line for line in lines):
-                fix_parenthesis_error(cif, err)
-                error_report['parenthesis_error'] += 1
-            else:
-                if debug:
-                    print(cif)
-                    print('\n')
-                    print(err)
-                    return error_report, cif_metadata
-                else:
-                    Path(cif).unlink()
-                    error_report['removed'] += 1
-                    break
-        except Exception as err:
-            if debug:
+    with Timeout(10.0, swallow_exc=True) as timeout_ctx:
+        while not clean:
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore')
+                    atoms = read(cif, format='cif')
+                    if unwanted_atoms:
+                        if any([atom in unwanted_atoms for atom in atoms.get_atomic_numbers()]):
+                            Path(cif).unlink()
+                            error_report['unwanted_atom'] += 1
+                            break
+                    error_report['precision_error'] = fix_precision_errors(cif)
+                    cif_metadata['filepath'] = cif
+                    cif_metadata['Spacegroup'] = [atoms.info['spacegroup'].no]
+                    for i, element in enumerate(np.unique(atoms.get_atomic_numbers())):
+                        cif_metadata[f'Element{i}'] = element
+                    clean = True
+            except AssertionError as err:
                 lines = list(iter_exc_lines(err))
-                print(cif)
-                print('\n')
-                print(err)
-                print('\n')        
-                for line in lines:
-                    print(line)
-                return error_report, cif_metadata
-            else:
+                if any("line.lower().startswith('data_')" in line for line in lines):
+                    Path(cif).unlink()
+                    error_report['removed'] += 1
+                    break
+                else:
+                    if debug:
+                        print(cif)
+                        print('\n')
+                        print(err)
+                        return error_report, cif_metadata
+                    else:
+                        Path(cif).unlink()
+                        error_report['removed'] += 1
+                        break
+            except StopIteration as err:
                 Path(cif).unlink()
                 error_report['removed'] += 1
                 break
+            except IndexError as err:
+                lines = list(iter_exc_lines(err))
+                if any("pop from empty list" in line for line in lines):
+                    Path(cif).unlink()
+                    error_report['removed'] += 1
+                    break
+                else:
+                    if debug:
+                        print(cif)
+                        print('\n')
+                        print(err)
+                        return error_report, cif_metadata
+                    else:
+                        Path(cif).unlink()
+                        error_report['removed'] += 1
+                        break
+            except RuntimeError as err:
+                lines = list(iter_exc_lines(err))
+                if any("CIF loop ended unexpectedly with incomplete row" in line for line in lines):
+                    fix_loop_error(cif, err)
+                    error_report['loop_error'] += 1
+                else:
+                    if debug:
+                        print(cif)
+                        print('\n')
+                        print(err)
+                        return error_report, cif_metadata
+                    else:
+                        Path(cif).unlink()
+                        error_report['removed'] += 1
+                        break
+            except ValueError as err:
+                lines = list(iter_exc_lines(err))
+                if any("could not convert string to float" in line for line in lines):
+                    fix_parenthesis_error(cif, err)
+                    error_report['parenthesis_error'] += 1
+                else:
+                    if debug:
+                        print(cif)
+                        print('\n')
+                        print(err)
+                        return error_report, cif_metadata
+                    else:
+                        Path(cif).unlink()
+                        error_report['removed'] += 1
+                        break
+            except TimeoutException as err:
+                Path(cif).unlink()
+                error_report['timeout'] += 1
+                break
+            except Exception as err:
+                if debug:
+                    lines = list(iter_exc_lines(err))
+                    print(cif)
+                    print('\n')
+                    print(err)
+                    print('\n')        
+                    for line in lines:
+                        print(line)
+                    return error_report, cif_metadata
+                else:
+                    Path(cif).unlink()
+                    error_report['removed'] += 1
+                    break
+    
     if not clean:
         cif_metadata = dict()
     return error_report, cif_metadata
@@ -220,7 +229,7 @@ def remove_duplicate_cifs(metadata):
     
     return None
 
-def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, verbose=True, unwanted_atoms=None, n_processes=cpu_count() - 1):
+def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, verbose=True, unwanted_atoms=None, n_processes=cpu_count() - 1, chunksize=100):
     
     if save_folder is None:
         save_folder = cif_folder[:-1] + '_cleaned/'
@@ -233,14 +242,14 @@ def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, 
     # else:
     cifs = [str(file.name) for file in Path(cif_folder).glob('*.cif')]
     
-    error_summary = dict(removed=0, loop_error=0, precision_error=0, parenthesis_error=0, unwanted_atom=0)
+    error_summary = dict(removed=0, loop_error=0, precision_error=0, parenthesis_error=0, unwanted_atom=0, timeout=0)
     
     df_metadata = pd.DataFrame()
     # parellelize
     inputs = zip(cifs, repeat(cif_folder), repeat(save_folder), repeat(unwanted_atoms))
     with Pool(processes=n_processes) as pool:
         with tqdm(total=len(cifs), desc='Cleaning CIFs') as pbar:
-            for error_report, cif_metadata in pool.imap_unordered(clean_cif, inputs, chunksize=10):
+            for error_report, cif_metadata in pool.imap_unordered(clean_cif, inputs, chunksize=chunksize):
                 # if cod:
                 #     subfolder = '/'.join((save_folder + cif).split('/')[:-1]) + '/'
                 #     if not Path(subfolder).exists():

@@ -4,7 +4,8 @@ from pathlib import Path
 import requests
 import zipfile
 import io
-from itertools import islice
+from multiprocessing import Pool, cpu_count
+from itertools import islice, repeat
 from tqdm.auto import tqdm
 
 #%% Functions
@@ -18,8 +19,42 @@ def batched(iterable, n):
         if not batch:
             return
         yield batch
-        
-def queryCOD(save_folder, included_atoms=None, excluded_atoms=None, batch_size=800):
+
+def downloadFromCOD(input_tuple):
+    id_batch, save_folder, batch_size = input_tuple
+    try:
+        requested_ids = ''.join(id_batch)
+    
+        # Request cif files
+        api_url = f'https://www.crystallography.net/cod/result?format=zip&id={requested_ids}'
+        response = requests.get(api_url)
+        # Extract requested cif files
+        zip_file = zipfile.ZipFile(io.BytesIO(response.content))
+        zip_file.extractall(save_folder)
+    except requests.exceptions.ConnectionError:
+        for id_sub_batch in batched(id_batch, batch_size // 10):
+            try:
+                requested_ids = ''.join(id_sub_batch)
+                
+                # Request cif files
+                api_url = f'https://www.crystallography.net/cod/result?format=zip&id={requested_ids}'
+                response = requests.get(api_url)
+                # Extract requested cif files
+                zip_file = zipfile.ZipFile(io.BytesIO(response.content))
+                zip_file.extractall(save_folder)
+            except requests.exceptions.ConnectionError:
+                for id_sub_sub_batch in batched(id_sub_batch, batch_size // 100):
+                    requested_ids = ''.join(id_sub_sub_batch)
+                    
+                    # Request cif files
+                    api_url = f'https://www.crystallography.net/cod/result?format=zip&id={requested_ids}'
+                    response = requests.get(api_url)
+                    # Extract requested cif files
+                    zip_file = zipfile.ZipFile(io.BytesIO(response.content))
+                    zip_file.extractall(save_folder)
+    return len(id_batch)
+
+def queryCOD(save_folder, included_atoms=None, excluded_atoms=None, batch_size=800, n_processes=cpu_count() - 1):
     if not Path(save_folder).exists():
         Path(save_folder).mkdir(parents=True)
     
@@ -30,7 +65,7 @@ def queryCOD(save_folder, included_atoms=None, excluded_atoms=None, batch_size=8
     if excluded_atoms:
         for i, excluded_atom in enumerate(excluded_atoms):
             id_url += f'&nel{i+1}={excluded_atom}'
-            
+    print('Requesting CIF IDs')
     id_response = requests.get(id_url)
     
     with open(f'{save_folder}cif_IDs.txt', 'w') as file:
@@ -38,32 +73,13 @@ def queryCOD(save_folder, included_atoms=None, excluded_atoms=None, batch_size=8
         
     with open(f'{save_folder}cif_IDs.txt', 'r') as file:
         ids = file.readlines()
+    
+    inputs = zip(batched(ids, batch_size), repeat(save_folder), repeat(batch_size))
+    
+    with Pool(processes=n_processes) as pool:
         with tqdm(total=len(ids), desc='Downloading CIFs') as pbar:
-            for id_batch in batched(ids, batch_size):
-                try:
-                    requested_ids = ''.join(id_batch)
-                
-                    # Request cif files
-                    api_url = f'https://www.crystallography.net/cod/result?format=zip&id={requested_ids}'
-                    response = requests.get(api_url)
-                    # Extract requested cif files
-                    zip_file = zipfile.ZipFile(io.BytesIO(response.content))
-                    zip_file.extractall(save_folder)
-                    
-                    pbar.update(n=len(id_batch))
-                except requests.exceptions.ConnectionError:
-                    print('Exception caught')
-                    for id_sub_batch in batched(id_batch, batch_size // 10):
-                        requested_ids = ''.join(id_sub_batch)
-                        
-                        # Request cif files
-                        api_url = f'https://www.crystallography.net/cod/result?format=zip&id={requested_ids}'
-                        response = requests.get(api_url)
-                        # Extract requested cif files
-                        zip_file = zipfile.ZipFile(io.BytesIO(response.content))
-                        zip_file.extractall(save_folder)
-                        
-                        pbar.update(n=len(id_sub_batch))
+            for n_ids in pool.imap_unordered(downloadFromCOD, inputs, chunksize=1):
+                pbar.update(n=n_ids)
             
     Path(f'{save_folder}cif_IDs.txt').unlink()
     
@@ -76,6 +92,6 @@ if __name__ == '__main__':
     included_atoms = None
     excluded_atoms = ['C']
     
-    queryCOD(cif_folder, included_atoms=included_atoms, excluded_atoms=excluded_atoms)
+    # queryCOD(cif_folder, included_atoms=included_atoms, excluded_atoms=excluded_atoms)
     
-    cif_cleaning_pipeline(cif_folder)
+    cif_cleaning_pipeline(cif_folder, chunksize=100)
