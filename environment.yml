@@ -29,3 +29,5 @@ dependencies:
   - nglview
   - cupy
   - traceback-with-variables
+  pip:
+    - stopit

@@ -123,7 +123,7 @@ class structureGenerator():
                 InAs = dict(a=6.058),
                 InSb = dict(a=6.4782),
             ),
-            Flourite = dict(
+            Fluorite = dict(
                 CaF2 = dict(a=5.4626),
                 SrF2 = dict(a=5.800),
                 SrCl2 = dict(a=6.9767),
@@ -137,7 +137,7 @@ class structureGenerator():
                 UO2 = dict(a=5.372),
                 NpO2 = dict(a=5.4334),
             ),
-            AntiFlourite = dict(
+            AntiFluorite = dict(
                 Li2O = dict(a=4.6114),
                 Li2S = dict(a=5.710),
                 Li2Se = dict(a=6.002),
@@ -457,7 +457,7 @@ class structureGenerator():
             cellparams = dict(
                 a=radii_sum * fit_params[0] + fit_params[1],
             )
-        elif crystal_type == 'Flourite':
+        elif crystal_type == 'Fluorite':
             atom_occurence = [1, 2]
             if not hea_mean_radius:
                 atom_radii = [self.get_radius(atom) for atom in atom_list]
@@ -469,7 +469,7 @@ class structureGenerator():
             cellparams = dict(
                 a=radii_sum * fit_params[0] + fit_params[1],
             )
-        elif crystal_type == 'AntiFlourite':
+        elif crystal_type == 'AntiFluorite':
             atom_occurence = [2, 1]
             if not hea_mean_radius:
                 atom_radii = [self.get_radius(atom) for atom in atom_list]
@@ -613,7 +613,7 @@ class structureGenerator():
                 f'''"{crystal_type}" is not a valid crystal type!
             Valid crystal types are:
             [SC, FCC, BCC, SH, HCP, DIA, NaCl, 
-            ZincBlende, Flourite, AntiFlourite, 
+            ZincBlende, Fluorite, AntiFluorite, 
             Wurtzite, NiAs, CsCl, Rutile, CdI2, 
             CdCl2, Perovskite, ReO3, Spinel, K2NiF4]
                 '''
@@ -875,7 +875,7 @@ class structureGenerator():
                 ], 
                 size=size
             )
-        elif crystal_type == 'Flourite':
+        elif crystal_type == 'Fluorite':
             cell = crystal(
                 compound, 
                 basis=[
@@ -894,7 +894,7 @@ class structureGenerator():
                 ], 
                 size=size
             )
-        elif crystal_type == 'AntiFlourite':
+        elif crystal_type == 'AntiFluorite':
             cell = crystal(
                 compound, 
                 basis=[
@@ -1120,7 +1120,7 @@ class structureGenerator():
                 f'''"{crystal_type}" is not a valid crystal type!
             Valid crystal types are:
             [SC, FCC, BCC, SH, HCP, DIA, NaCl, 
-            ZincBlende, Flourite, AntiFlourite, 
+            ZincBlende, Fluorite, AntiFluorite, 
             Wurtzite, NiAs, CsCl, Rutile, CdI2, 
             CdCl2, Perovskite, ReO3, Spinel, K2NiF4]
                 '''

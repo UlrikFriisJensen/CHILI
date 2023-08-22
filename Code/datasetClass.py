@@ -74,20 +74,20 @@ class InOrgMatDatasets(Dataset):
                 cell_params = torch.tensor(h5f['OtherLabels']['CellParameters'][:], dtype=torch.float32)
                 atomic_species = torch.tensor(h5f['OtherLabels']['ElementsPresent'][:], dtype=torch.float32)
                 crystal_type = h5f['OtherLabels']['CrystalType'][()].decode()
-                # Read spectra
-                for key in h5f['Spectra'].keys():
+                # Read scattering data
+                for key in h5f['ScatteringData'].keys():
                     target_dict = dict(
                         crystal_type = crystal_type,
                         atomic_species = atomic_species,
                         n_atomic_species = len(atomic_species),
                         cell_params = cell_params,
-                        np_size = h5f['Spectra'][key]['NP size (Å)'][()],
-                        nd = torch.tensor(h5f['Spectra'][key]['ND'][:], dtype=torch.float32),
-                        xrd = torch.tensor(h5f['Spectra'][key]['XRD'][:], dtype=torch.float32),
-                        nPDF = torch.tensor(h5f['Spectra'][key]['nPDF'][:], dtype=torch.float32),
-                        xPDF = torch.tensor(h5f['Spectra'][key]['xPDF'][:], dtype=torch.float32),
-                        sans = torch.tensor(h5f['Spectra'][key]['SANS'][:], dtype=torch.float32),
-                        saxs = torch.tensor(h5f['Spectra'][key]['SAXS'][:], dtype=torch.float32),
+                        np_size = h5f['ScatteringData'][key]['NP size (Å)'][()],
+                        nd = torch.tensor(h5f['ScatteringData'][key]['ND'][:], dtype=torch.float32),
+                        xrd = torch.tensor(h5f['ScatteringData'][key]['XRD'][:], dtype=torch.float32),
+                        nPDF = torch.tensor(h5f['ScatteringData'][key]['nPDF'][:], dtype=torch.float32),
+                        xPDF = torch.tensor(h5f['ScatteringData'][key]['xPDF'][:], dtype=torch.float32),
+                        sans = torch.tensor(h5f['ScatteringData'][key]['SANS'][:], dtype=torch.float32),
+                        saxs = torch.tensor(h5f['ScatteringData'][key]['SAXS'][:], dtype=torch.float32),
                     )
                     
                     data = Data(x=node_feat, edge_index=edge_index, edge_attr=edge_feat, pos=pos_relative, pos_real=pos_real, y=target_dict) # TODO: Don't know if we should use pos or include positions in node features

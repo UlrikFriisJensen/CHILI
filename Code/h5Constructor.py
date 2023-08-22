@@ -19,6 +19,7 @@ from ase.io import write, read
 from ase.build import make_supercell
 from ase.neighborlist import neighbor_list, natural_cutoffs
 from Code.simScatteringPatterns import simPDFs, cif_to_NP_GPU, Debye_Calculator_GPU_bins
+from DebyeCalculator.debye_calculator import DebyeCalculator
 
 #%% Graph construction
 
@@ -132,11 +133,12 @@ class h5Constructor():
             return
         
         # Construct discrete particles for simulation of spectra
-        radii = [5, 10, 15, 20, 25] # Å
+        radii = [5., 10., 15., 20., 25.] # Å
         
         struc_list, size_list = cif_to_NP_GPU(self.cif_dir + '/' + cif, radii)
-        ### Simulate spectra
+        ### Simulate scattering data
         ## Setup
+        
         # X-ray PDF
         pdf_xray_generator = simPDFs()
         pdf_xray_generator.genPDFs(self.cif_dir + '/' + cif)
@@ -168,10 +170,10 @@ class h5Constructor():
             params_h5.create_dataset('ElementsPresent', data=np.unique(node_features[:,0]))
 
             # Save spectra
-            spectra_h5 = h5_file.require_group('Spectra')
+            spectra_h5 = h5_file.require_group('ScatteringData')
             
             ## Simulate spectra
-            for i, np_size in tqdm(enumerate(size_list), total=len(size_list), desc='Simulating spectra', leave=False):
+            for i, np_size in tqdm(enumerate(size_list), total=len(size_list), desc='Simulating scattering data', leave=False):
                 # Differentiate spectra by size
                 spectra_size_h5 = spectra_h5.require_group(f'{size_list[i]:.2f}Å')
                 spectra_size_h5.create_dataset('NP size (Å)', data=size_list[i])
