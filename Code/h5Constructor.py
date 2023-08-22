@@ -1,12 +1,7 @@
 #%% Imports
 import os, sys, math, torch
-from tkinter.filedialog import LoadFileDialog
-
-from diffpy.Structure import loadStructure, Lattice
 from mendeleev import element
 import numpy as np
-from diffpy.srreal.pdfcalculator import DebyePDFCalculator
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 import h5py
 from multiprocessing import Pool, cpu_count
@@ -14,11 +9,9 @@ from pathlib import Path
 from torch_geometric.data import Data
 from torch_geometric.utils import to_networkx
 from networkx.algorithms.components import is_connected
-from networkx import draw
-from ase.io import write, read
+from ase.io import read
 from ase.build import make_supercell
-from ase.neighborlist import neighbor_list, natural_cutoffs
-from Code.simScatteringPatterns import simPDFs, cif_to_NP_GPU, Debye_Calculator_GPU_bins
+from Code.simScatteringPatterns import simPDFs, cif_to_NP_GPU
 from DebyeCalculator.debye_calculator import DebyeCalculator
 
 #%% Graph construction
@@ -133,26 +126,14 @@ class h5Constructor():
             return
         
         # Construct discrete particles for simulation of spectra
-        radii = [5., 10., 15., 20., 25.] # Å
+        radii = [5., 10.]#, 15., 20., 25.] # Å
         
         struc_list, size_list = cif_to_NP_GPU(self.cif_dir + '/' + cif, radii)
-        ### Simulate scattering data
+
         ## Setup
-        
-        # X-ray PDF
-        pdf_xray_generator = simPDFs()
-        pdf_xray_generator.genPDFs(self.cif_dir + '/' + cif)
-        
-        # Neutron PDF
-        pdf_neutron_generator = simPDFs()
-        pdf_neutron_generator.set_parameters(radiationType='N')
-        pdf_neutron_generator.genPDFs(self.cif_dir + '/' + cif)
-        
-        # Small Angle Scattering
-        q_sas = np.arange(0, 3, 0.01)
-        
-        # Diffraction
-        q_diff = np.arange(1, 30, 0.05)
+        # Create an instance of DebyeCalculator
+        xray_calculator = DebyeCalculator(device='cuda', verbose=1, qmin=1, qmax=30, qstep=0.05, biso=0.3, rmin=0.0, rmax=30.0, rstep=0.1, radiation_type='xray')
+        neutron_calculator = DebyeCalculator(device='cuda', verbose=1, qmin=1, qmax=30, qstep=0.05, biso=0.3, rmin=0.0, rmax=30.0, rstep=0.1, radiation_type='neutron')
         
         # Construct .h5 file
         with h5py.File(f'{self.save_dir}/{cif[:-4]}.h5', 'w') as h5_file:
@@ -169,68 +150,46 @@ class h5Constructor():
             params_h5.create_dataset('CrystalType', data=cif.split('_')[0])
             params_h5.create_dataset('ElementsPresent', data=np.unique(node_features[:,0]))
 
-            # Save spectra
-            spectra_h5 = h5_file.require_group('ScatteringData')
+            # Save scattering data
+            scattering_h5 = h5_file.require_group('ScatteringData')
             
-            ## Simulate spectra
+            ## Simulate scattering data
             for i, np_size in tqdm(enumerate(size_list), total=len(size_list), desc='Simulating scattering data', leave=False):
                 # Differentiate spectra by size
-                spectra_size_h5 = spectra_h5.require_group(f'{size_list[i]:.2f}Å')
-                spectra_size_h5.create_dataset('NP size (Å)', data=size_list[i])
+                scattering_size_h5 = scattering_h5.require_group(f'{np_size:.2f}Å')
+                scattering_size_h5.create_dataset('NP size (Å)', data=np_size)
                 
-                # X-ray PDF
-                pdf_xray = pdf_xray_generator.getPDF(psize=np_size)
-                # Save spectra
-                spectra_size_h5.create_dataset('xPDF', data=pdf_xray)
-                
-                # Neutron PDF
-                pdf_neutron = pdf_neutron_generator.getPDF(psize=np_size)
-                # Save spectra
-                spectra_size_h5.create_dataset('nPDF', data=pdf_neutron)
-                
-                # SAXS
-                saxs = Debye_Calculator_GPU_bins(
-                    struc_list[i].get_chemical_symbols(), 
-                    np.float16(struc_list[i].get_positions()), 
-                    q_sas, 
-                    n_bins=10000, 
-                    radiationType='X'
-                )
-                # Save spectra
-                spectra_size_h5.create_dataset('SAXS', data=np.vstack((q_sas, saxs)))
-                
-                # SANS
-                sans = Debye_Calculator_GPU_bins(
-                    struc_list[i].get_chemical_symbols(), 
-                    np.float16(struc_list[i].get_positions()), 
-                    q_sas, 
-                    n_bins=10000, 
-                    radiationType='N'
-                )
-                # Save spectra
-                spectra_size_h5.create_dataset('SANS', data=np.vstack((q_sas, sans)))
+                # Simulation parameters for PD and PDF
+                xray_calculator.update_parameters(qmin=1, qmax=30, qstep=0.05)
+                neutron_calculator.update_parameters(qmin=1, qmax=30, qstep=0.05)
                 
                 # XRD
-                xrd = Debye_Calculator_GPU_bins(
-                    struc_list[i].get_chemical_symbols(), 
-                    np.float16(struc_list[i].get_positions()), 
-                    q_diff, 
-                    n_bins=10000, 
-                    radiationType='X'
-                )
-                # Save spectra
-                spectra_size_h5.create_dataset('XRD', data=np.vstack((q_diff, xrd)))
-                                
+                xrd = xray_calculator.iq(struc_list[i])
+                scattering_size_h5.create_dataset('XRD', data=xrd)
+                
+                # X-ray PDF
+                pdf_xray = xray_calculator.gr(struc_list[i])
+                scattering_size_h5.create_dataset('xPDF', data=pdf_xray)
+                
                 # ND
-                nd = Debye_Calculator_GPU_bins(
-                    struc_list[i].get_chemical_symbols(), 
-                    np.float16(struc_list[i].get_positions()), 
-                    q_diff, 
-                    n_bins=10000, 
-                    radiationType='N'
-                )
-                # Save spectra
-                spectra_size_h5.create_dataset('ND', data=np.vstack((q_diff, nd)))
+                nd = neutron_calculator.iq(struc_list[i])
+                scattering_size_h5.create_dataset('ND', data=nd)
+                
+                # Neutron PDF
+                pdf_neutron = neutron_calculator.gr(struc_list[i])
+                scattering_size_h5.create_dataset('nPDF', data=pdf_neutron)
+                
+                # Simulation parameters for SAS
+                xray_calculator.update_parameters(qmin=0, qmax=3, qstep=0.01)
+                neutron_calculator.update_parameters(qmin=0, qmax=3, qstep=0.01)
+                
+                # SAXS
+                saxs = xray_calculator.iq(struc_list[i])
+                scattering_size_h5.create_dataset('SAXS', data=saxs)
+                
+                # SANS
+                sans = neutron_calculator.iq(struc_list[i])
+                scattering_size_h5.create_dataset('SANS', data=sans)
     
     def gen_h5s(self, num_processes=cpu_count() - 1, parallelize=True):
         
