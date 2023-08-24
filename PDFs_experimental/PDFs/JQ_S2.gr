@@ -16,11 +16,6 @@ rmin = 0.0
 rstep = 0.01
 rpoly = 0.9
 
-[Misc]
-inputdir = /Users/kirstenmariejensen/Seafile/KU/KU_Ptnanoparticles_JQ/DESY_Sep17
-savedir = /Users/kirstenmariejensen/Seafile/KU/KU_Ptnanoparticles_JQ/DESY_Sep17
-backgroundfilefull = /Users/kirstenmariejensen/Seafile/KU/KU_Ptnanoparticles_JQ/DESY_Sep17/JQ_EG.chi
-
 #### start data
 #S 1
 #L r($\AA$)  G($\AA^{-2}$)
