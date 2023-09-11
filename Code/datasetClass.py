@@ -107,7 +107,7 @@ class InOrgMatDatasets(Dataset):
                     elif 'Test' in raw_path:
                         torch.save(data, Path(self.processed_dir).joinpath(f'./Test/data_{idx_test}.pt'))
                         idx_test += 1
-                    
+        return None          
 
     def len(self):
         return len(self.processed_file_names)
@@ -115,6 +115,9 @@ class InOrgMatDatasets(Dataset):
     def get(self, idx, data_split='train'):
         data = torch.load(Path(self.processed_dir).joinpath(f'./{data_split.capitalize()}/data_{idx}.pt'))
         return data
+    
+    def statistics(self):
+        return None
     
 if __name__ == '__main__':
     InOrgMatDatasets('DatasetTest')
