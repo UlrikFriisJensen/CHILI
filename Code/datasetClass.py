@@ -7,6 +7,7 @@ from tqdm import tqdm
 import numpy as np
 import h5py
 from collections import namedtuple
+import pandas as pd
 
 # Chemistry imports
 from diffpy.Structure import loadStructure
@@ -22,37 +23,42 @@ from networkx.algorithms.components import is_connected
 #%% Dataset Class
 
 class InOrgMatDatasets(Dataset):
-    def __init__(self, dataset, root='../Dataset/', transform=None, pre_transform=None, pre_filter=None, force_update=False):
+    def __init__(self, dataset, root='./', transform=None, pre_transform=None, pre_filter=None, force_update=False):
         self.dataset = dataset
         root += self.dataset + '/'
-        if force_update:
-            self.force_download = True
-            self.force_process = True
+        # if force_update:
+        #     self.force_download = True
+        #     self.force_process = True
         super().__init__(root, transform, pre_transform, pre_filter)
 
     @property
     def raw_file_names(self):
-        if not self.force_download:
-            raw_file_names = [str(filepath.relative_to(self.raw_dir)) for filepath in Path(self.raw_dir).glob('**/*.h5')]
-        else:
-            raw_file_names = []
-            self.force_download = False
-        return raw_file_names
+        if not self._raw_file_names:
+            self._raw_file_names = []
+        return self._raw_file_names
 
+    @raw_file_names.setter
+    def raw_file_names(self, folder_path):
+        self._raw_file_names = self.update_file_names(folder_path, file_extension='h5')
+    
     @property
     def processed_file_names(self):
-        if not self.force_process:
-            processed_file_names = [str(filepath.relative_to(self.processed_dir)) for filepath in Path(self.processed_dir).glob('**/*.pt')]
-        else:
-            processed_file_names = []
-            self.force_process = False
-        return processed_file_names
+        return []
 
+    @raw_file_names.setter
+    def raw_file_names(self, folder_path):
+        return self.update_file_names(folder_path, file_extension='pt')
+
+    def update_file_names(self, folder_path, file_extension='*'):
+        file_names = [str(filepath.relative_to(folder_path)) for filepath in Path(folder_path).glob(f'**/*.{file_extension}')]
+        return file_names
+    
     def download(self):
         # Download to `self.raw_dir`.
-        path = download_url(f'https://sid.erda.dk/share_redirect/HiFeydCIqA/{self.dataset}.zip', self.raw_dir)
+        path = download_url(f'https://sid.erda.dk/share_redirect/h6ktCBGzPF/{self.dataset}.zip', self.raw_dir)
         extract_zip(path, self.raw_dir)
         Path(path).unlink()
+        self.raw_file_names(self.raw_dir)
 
     def process(self):  
         Path(self.processed_dir + '/Train/').mkdir(parents=True, exist_ok=True)   
@@ -65,15 +71,15 @@ class InOrgMatDatasets(Dataset):
             # Read data from `raw_path`.
             with h5py.File(raw_path, 'r') as h5f:
                 # Read graph attributes
-                node_feat = torch.tensor(h5f['GraphElements']['NodeFeatures'][:], dtype=torch.float32)
-                edge_index = torch.tensor(h5f['GraphElements']['EdgeDirections'][:], dtype=torch.long)
-                edge_feat = torch.tensor(h5f['GraphElements']['EdgeFeatures'][:], dtype=torch.float32)
-                pos_real = torch.tensor(h5f['GraphElements']['RealPositions'][:], dtype=torch.float32)
-                pos_relative = torch.tensor(h5f['GraphElements']['ScaledPositions'][:], dtype=torch.float32)
+                node_feat = torch.tensor(h5f['LocalLabels']['NodeFeatures'][:], dtype=torch.float32)
+                edge_index = torch.tensor(h5f['LocalLabels']['EdgeDirections'][:], dtype=torch.long)
+                edge_feat = torch.tensor(h5f['LocalLabels']['EdgeFeatures'][:], dtype=torch.float32)
+                pos_real = torch.tensor(h5f['LocalLabels']['Coordinates'][:], dtype=torch.float32)
+                pos_frac = torch.tensor(h5f['LocalLabels']['FractionalCoordinates'][:], dtype=torch.float32)
                 # Read other labels
-                cell_params = torch.tensor(h5f['OtherLabels']['CellParameters'][:], dtype=torch.float32)
-                atomic_species = torch.tensor(h5f['OtherLabels']['ElementsPresent'][:], dtype=torch.float32)
-                crystal_type = h5f['OtherLabels']['CrystalType'][()].decode()
+                cell_params = torch.tensor(h5f['GlobalLabels']['CellParameters'][:], dtype=torch.float32)
+                atomic_species = torch.tensor(h5f['GlobalLabels']['ElementsPresent'][:], dtype=torch.float32)
+                crystal_type = h5f['GlobalLabels']['CrystalType'][()].decode()
                 # Read scattering data
                 for key in h5f['ScatteringData'].keys():
                     target_dict = dict(
@@ -90,7 +96,7 @@ class InOrgMatDatasets(Dataset):
                         saxs = torch.tensor(h5f['ScatteringData'][key]['SAXS'][:], dtype=torch.float32),
                     )
                     
-                    data = Data(x=node_feat, edge_index=edge_index, edge_attr=edge_feat, pos=pos_relative, pos_real=pos_real, y=target_dict) # TODO: Don't know if we should use pos or include positions in node features
+                    data = Data(x=node_feat, edge_index=edge_index, edge_attr=edge_feat, pos=pos_frac, pos_real=pos_real, y=target_dict)
 
                     if self.pre_filter is not None and not self.pre_filter(data):
                         continue
@@ -107,6 +113,7 @@ class InOrgMatDatasets(Dataset):
                     elif 'Test' in raw_path:
                         torch.save(data, Path(self.processed_dir).joinpath(f'./Test/data_{idx_test}.pt'))
                         idx_test += 1
+        self.processed_file_names(self.processed_dir)
         return None          
 
     def len(self):
@@ -116,8 +123,21 @@ class InOrgMatDatasets(Dataset):
         data = torch.load(Path(self.processed_dir).joinpath(f'./{data_split.capitalize()}/data_{idx}.pt'))
         return data
     
-    def statistics(self):
-        return None
+    def get_statistics(self, return_dataframe=False, verbose=True):
+        stat_path = Path(self.processed_dir).joinpath('./datasetStatistics.pkl')
+        if stat_path.exists():
+            df_stats = pd.read_pickle(stat_path)
+        else:
+            df_stats = pd.DataFrame(columns=['# of nodes', '# of edges', '# of elements', 'Crystal type', 'NP size (Å)', 'Elements'])
+            
+            graph = self.get(idx=0,data_split='Train')
+            df_stats.loc[df_stats.shape[0]] = [graph.num_nodes, graph.num_edges, graph.y['n_atomic_species'], graph.y['crystal_type'], graph.y['np_size'], graph.y['atomic_species'],]
+        
+        
+        if return_dataframe:
+            return df_stats
+        else:
+            return None
     
 if __name__ == '__main__':
     InOrgMatDatasets('DatasetTest')

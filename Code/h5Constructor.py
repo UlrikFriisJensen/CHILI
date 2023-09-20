@@ -130,8 +130,8 @@ class h5Constructor():
         
         ## Setup
         # Create an instance of DebyeCalculator
-        xray_calculator = DebyeCalculator(device=device, qmin=1, qmax=30, qstep=0.01, biso=0.3, rmin=0.0, rmax=30.0, rstep=0.1, radiation_type='xray')
-        neutron_calculator = DebyeCalculator(device=device, qmin=1, qmax=30, qstep=0.01, biso=0.3, rmin=0.0, rmax=30.0, rstep=0.1, radiation_type='neutron')
+        xray_calculator = DebyeCalculator(device=device, qmin=1, qmax=30, qstep=0.01, biso=0.3, rmin=0.0, rmax=30.0, rstep=0.01, radiation_type='xray')
+        neutron_calculator = DebyeCalculator(device=device, qmin=1, qmax=30, qstep=0.01, biso=0.3, rmin=0.0, rmax=30.0, rstep=0.01, radiation_type='neutron')
         
         # Construct discrete particles for simulation of spectra
         # struc_list, size_list = cif_to_NP_GPU(self.cif_dir + '/' + cif, np_radii)
@@ -152,14 +152,14 @@ class h5Constructor():
         # Construct .h5 file
         with h5py.File(f'{self.save_dir}/{cif[:-4]}.h5', 'w') as h5_file:
             # Save elements for the graph
-            graph_h5 = h5_file.require_group('GraphElements')
+            graph_h5 = h5_file.require_group('LocalLabels')
             graph_h5.create_dataset('NodeFeatures', data=node_features)
             graph_h5.create_dataset('EdgeFeatures', data=edge_features)
             graph_h5.create_dataset('EdgeDirections', data=direction)
-            graph_h5.create_dataset('ScaledPositions', data=node_pos_relative)
-            graph_h5.create_dataset('RealPositions', data=node_pos_real)
+            graph_h5.create_dataset('FractionalCoordinates', data=node_pos_relative)
+            graph_h5.create_dataset('Coordinates', data=node_pos_real)
             
-            params_h5 = h5_file.require_group('OtherLabels')
+            params_h5 = h5_file.require_group('GlobalLabels')
             params_h5.create_dataset('CellParameters', data=cell_parameters)
             params_h5.create_dataset('CrystalType', data=cif.split('_')[0])
             params_h5.create_dataset('ElementsPresent', data=np.unique(node_features[:,0]))
@@ -173,21 +173,11 @@ class h5Constructor():
                 scattering_size_h5 = scattering_h5.require_group(f'{np_size:.2f}Å')
                 scattering_size_h5.create_dataset('NP size (Å)', data=np_size)
                 
-                # Simulation parameters for PD and PDF
-                # xray_calculator.update_parameters(qmin=1, qmax=30, qstep=0.05)
-                # neutron_calculator.update_parameters(qmin=1, qmax=30, qstep=0.05)
-                
-                # Calculate scattering for large Q range
-                # r, q, iq, _, _, gr = xray_calculator._get_all(struc_list[i])
-                
                 # XRD
                 scattering_size_h5.create_dataset('XRD', data=np.vstack((x_q, x_iq[i])))
                 
                 # X-ray PDF
                 scattering_size_h5.create_dataset('xPDF', data=np.vstack((x_r, x_gr[i])))
-                
-                # Calculate scattering for large Q range
-                # r, q, iq, _, _, gr = neutron_calculator._get_all(struc_list[i])
                 
                 # ND
                 scattering_size_h5.create_dataset('ND', data=np.vstack((n_q, n_iq[i])))
@@ -195,16 +185,10 @@ class h5Constructor():
                 # Neutron PDF
                 scattering_size_h5.create_dataset('nPDF', data=np.vstack((n_r, n_gr[i])))
                 
-                # Simulation parameters for SAS
-                # xray_calculator.update_parameters(qmin=0, qmax=3, qstep=0.01)
-                # neutron_calculator.update_parameters(qmin=0, qmax=3, qstep=0.01)
-                
                 # SAXS
-                # saxs = xray_calculator.iq(struc_list[i])
                 scattering_size_h5.create_dataset('SAXS', data=np.vstack((saxs_q, saxs_iq[i])))
                 
                 # SANS
-                # sans = neutron_calculator.iq(struc_list[i])
                 scattering_size_h5.create_dataset('SANS', data=np.vstack((sans_q, sans_iq[i])))
     
     def gen_h5s(self, np_radii=[5., 10., 15., 20., 25.], parallelize=True, num_processes=cpu_count() - 1, device=None):
