@@ -23,31 +23,19 @@ from networkx.algorithms.components import is_connected
 #%% Dataset Class
 
 class InOrgMatDatasets(Dataset):
-    def __init__(self, dataset, root='./', transform=None, pre_transform=None, pre_filter=None, force_update=False):
+    def __init__(self, dataset, root='./', transform=None, pre_transform=None, pre_filter=None):
         self.dataset = dataset
         root += self.dataset + '/'
-        # if force_update:
-        #     self.force_download = True
-        #     self.force_process = True
         super().__init__(root, transform, pre_transform, pre_filter)
+        
 
     @property
     def raw_file_names(self):
-        if not self._raw_file_names:
-            self._raw_file_names = []
-        return self._raw_file_names
-
-    @raw_file_names.setter
-    def raw_file_names(self, folder_path):
-        self._raw_file_names = self.update_file_names(folder_path, file_extension='h5')
+        return self.update_file_names(self.raw_dir, file_extension='h5')
     
     @property
     def processed_file_names(self):
-        return []
-
-    @raw_file_names.setter
-    def raw_file_names(self, folder_path):
-        return self.update_file_names(folder_path, file_extension='pt')
+        return self.update_file_names(self.processed_dir, file_extension='pt')
 
     def update_file_names(self, folder_path, file_extension='*'):
         file_names = [str(filepath.relative_to(folder_path)) for filepath in Path(folder_path).glob(f'**/*.{file_extension}')]
@@ -58,7 +46,6 @@ class InOrgMatDatasets(Dataset):
         path = download_url(f'https://sid.erda.dk/share_redirect/h6ktCBGzPF/{self.dataset}.zip', self.raw_dir)
         extract_zip(path, self.raw_dir)
         Path(path).unlink()
-        self.raw_file_names(self.raw_dir)
 
     def process(self):  
         Path(self.processed_dir + '/Train/').mkdir(parents=True, exist_ok=True)   
@@ -113,7 +100,6 @@ class InOrgMatDatasets(Dataset):
                     elif 'Test' in raw_path:
                         torch.save(data, Path(self.processed_dir).joinpath(f'./Test/data_{idx_test}.pt'))
                         idx_test += 1
-        self.processed_file_names(self.processed_dir)
         return None          
 
     def len(self):
