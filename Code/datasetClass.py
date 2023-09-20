@@ -102,24 +102,30 @@ class InOrgMatDatasets(Dataset):
                         idx_test += 1
         return None          
 
-    def len(self):
-        return len(self.processed_file_names)
+    def len(self, split=None):
+        if split:
+            length = sum([split in file_path for file_path in self.processed_file_names])
+        else:
+            length = len(self.processed_file_names)
+        return length
 
     def get(self, idx, data_split='train'):
         data = torch.load(Path(self.processed_dir).joinpath(f'./{data_split.capitalize()}/data_{idx}.pt'))
         return data
     
     def get_statistics(self, return_dataframe=False, verbose=True):
-        stat_path = Path(self.processed_dir).joinpath('./datasetStatistics.pkl')
+        stat_path = Path(self.processed_dir).joinpath('../datasetStatistics.pkl')
         if stat_path.exists():
             df_stats = pd.read_pickle(stat_path)
         else:
-            df_stats = pd.DataFrame(columns=['# of nodes', '# of edges', '# of elements', 'Crystal type', 'NP size (Å)', 'Elements'])
-            
-            graph = self.get(idx=0,data_split='Train')
-            df_stats.loc[df_stats.shape[0]] = [graph.num_nodes, graph.num_edges, graph.y['n_atomic_species'], graph.y['crystal_type'], graph.y['np_size'], graph.y['atomic_species'],]
+            df_stats = pd.DataFrame(columns=['# of nodes', '# of edges', '# of elements', 'Crystal type', 'NP size (Å)', 'Elements', 'Split'])
+            for data_split in ['Train', 'Val', 'Test']:
+                for idx in range(self.len(split=data_split)):
+                    graph = self.get(idx=idx,data_split=data_split)
+                    df_stats.loc[df_stats.shape[0]] = [float(graph.num_nodes), float(graph.num_edges), float(graph.y['n_atomic_species']), graph.y['crystal_type'], graph.y['np_size'], graph.y['atomic_species'], data_split]
         
-        
+        df_stats.to_pickle(stat_path)
+
         if return_dataframe:
             return df_stats
         else:
