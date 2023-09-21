@@ -38,7 +38,7 @@ class InOrgMatDatasets(Dataset):
         return self.update_file_names(self.processed_dir, file_extension='pt')
 
     def update_file_names(self, folder_path, file_extension='*'):
-        file_names = [str(filepath.relative_to(folder_path)) for filepath in Path(folder_path).glob(f'**/*.{file_extension}')]
+        file_names = [str(filepath.relative_to(folder_path)) for filepath in Path(folder_path).glob(f'**/*.{file_extension}') if 'pre_' not in filepath]
         return file_names
     
     def download(self):
