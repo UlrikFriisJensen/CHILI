@@ -12,9 +12,9 @@ from torch_geometric.utils import to_networkx
 from networkx.algorithms.components import is_connected
 from ase.io import read
 from ase.build import make_supercell
-from Code.simScatteringPatterns import simPDFs, cif_to_NP_GPU
-from DebyeCalculator.debye_calculator import DebyeCalculator
-from DebyeCalculator.generate_nanoparticles import generate_nanoparticles
+from ase.spacegroup import get_spacegroup
+# from Code.simScatteringPatterns import simPDFs, cif_to_NP_GPU
+from debyecalculator import DebyeCalculator
 
 #%% Graph construction
 
@@ -64,6 +64,16 @@ class h5Constructor():
 
         # Load cif
         unit_cell = read(f'{self.cif_dir}/{cif}')
+        
+        # Find space group
+        space_group = get_spacegroup(unit_cell)
+        
+        # Find crystal type
+        cif_name_split = cif.split('_')
+        if len(cif_name_split) > 1:
+            crystal_type = cif_name_split[0]
+        elif len(cif_name_split) == 1:
+            crystal_type = None
         
         # Assert if pbc is true
         if not np.any(unit_cell.pbc):
@@ -161,7 +171,9 @@ class h5Constructor():
             
             params_h5 = h5_file.require_group('GlobalLabels')
             params_h5.create_dataset('CellParameters', data=cell_parameters)
-            params_h5.create_dataset('CrystalType', data=cif.split('_')[0])
+            params_h5.create_dataset('CrystalType', data=crystal_type)
+            params_h5.create_dataset('SpaceGroupSymbol', data=space_group.symbol)
+            params_h5.create_dataset('SpaceGroupNumber', data=space_group.no)
             params_h5.create_dataset('ElementsPresent', data=np.unique(node_features[:,0]))
 
             # Save scattering data

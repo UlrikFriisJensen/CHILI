@@ -10,9 +10,9 @@ from collections import namedtuple
 import pandas as pd
 
 # Chemistry imports
-from diffpy.Structure import loadStructure
-from mendeleev import element
-from ase.io import read
+# from diffpy.Structure import loadStructure
+# from mendeleev import element
+# from ase.io import read
 
 # Pytorch imports
 import torch
@@ -26,8 +26,7 @@ class InOrgMatDatasets(Dataset):
     def __init__(self, dataset, root='./', transform=None, pre_transform=None, pre_filter=None):
         self.dataset = dataset
         root += self.dataset + '/'
-        super().__init__(root, transform, pre_transform, pre_filter)
-        
+        super().__init__(root, transform, pre_transform, pre_filter)       
 
     @property
     def raw_file_names(self):
@@ -38,7 +37,7 @@ class InOrgMatDatasets(Dataset):
         return self.update_file_names(self.processed_dir, file_extension='pt')
 
     def update_file_names(self, folder_path, file_extension='*'):
-        file_names = [str(filepath.relative_to(folder_path)) for filepath in Path(folder_path).glob(f'**/*.{file_extension}') if 'pre_' not in filepath]
+        file_names = [str(filepath.relative_to(folder_path)) for filepath in Path(folder_path).glob(f'*.{file_extension}')]
         return file_names
     
     def download(self):
@@ -48,13 +47,13 @@ class InOrgMatDatasets(Dataset):
         Path(path).unlink()
 
     def process(self):  
-        Path(self.processed_dir + '/Train/').mkdir(parents=True, exist_ok=True)   
-        Path(self.processed_dir + '/Val/').mkdir(parents=True, exist_ok=True)   
-        Path(self.processed_dir + '/Test/').mkdir(parents=True, exist_ok=True)          
-        idx_train = 0
-        idx_val = 0
-        idx_test = 0
-        for raw_path in self.raw_paths:
+        # Path(self.processed_dir + '/Train/').mkdir(parents=True, exist_ok=True)   
+        # Path(self.processed_dir + '/Val/').mkdir(parents=True, exist_ok=True)   
+        # Path(self.processed_dir + '/Test/').mkdir(parents=True, exist_ok=True)          
+        # idx_train = 0
+        # idx_val = 0
+        # idx_test = 0
+        for i, raw_path in enumerate(self.raw_paths):
             # Read data from `raw_path`.
             with h5py.File(raw_path, 'r') as h5f:
                 # Read graph attributes
@@ -67,10 +66,14 @@ class InOrgMatDatasets(Dataset):
                 cell_params = torch.tensor(h5f['GlobalLabels']['CellParameters'][:], dtype=torch.float32)
                 atomic_species = torch.tensor(h5f['GlobalLabels']['ElementsPresent'][:], dtype=torch.float32)
                 crystal_type = h5f['GlobalLabels']['CrystalType'][()].decode()
+                space_group_symbol = h5f['GlobalLabels']['SpaceGroupSymbol'][()].decode()
+                space_group_number = h5f['GlobalLabels']['SpaceGroupNumber'][()]
                 # Read scattering data
                 for key in h5f['ScatteringData'].keys():
                     target_dict = dict(
                         crystal_type = crystal_type,
+                        space_group_symbol = space_group_symbol,
+                        space_group_number = space_group_number,
                         atomic_species = atomic_species,
                         n_atomic_species = len(atomic_species),
                         cell_params = cell_params,
@@ -90,16 +93,18 @@ class InOrgMatDatasets(Dataset):
 
                     if self.pre_transform is not None:
                         data = self.pre_transform(data)
-
-                    if 'Train' in raw_path:
-                        torch.save(data, Path(self.processed_dir).joinpath(f'./Train/data_{idx_train}.pt'))
-                        idx_train += 1
-                    elif 'Val' in raw_path:
-                        torch.save(data, Path(self.processed_dir).joinpath(f'./Val/data_{idx_val}.pt'))
-                        idx_val += 1
-                    elif 'Test' in raw_path:
-                        torch.save(data, Path(self.processed_dir).joinpath(f'./Test/data_{idx_test}.pt'))
-                        idx_test += 1
+                    
+                    torch.save(data, Path(self.processed_dir).joinpath(f'./data_{i}.pt'))
+                    
+                    # if 'Train' in raw_path:
+                    #     torch.save(data, Path(self.processed_dir).joinpath(f'./Train/data_{idx_train}.pt'))
+                    #     idx_train += 1
+                    # elif 'Val' in raw_path:
+                    #     torch.save(data, Path(self.processed_dir).joinpath(f'./Val/data_{idx_val}.pt'))
+                    #     idx_val += 1
+                    # elif 'Test' in raw_path:
+                    #     torch.save(data, Path(self.processed_dir).joinpath(f'./Test/data_{idx_test}.pt'))
+                    #     idx_test += 1
         return None          
 
     def len(self, split=None):
@@ -110,7 +115,7 @@ class InOrgMatDatasets(Dataset):
         return length
 
     def get(self, idx, data_split='train'):
-        data = torch.load(Path(self.processed_dir).joinpath(f'./{data_split.capitalize()}/data_{idx}.pt'))
+        data = torch.load(Path(self.processed_dir).joinpath(f'./data_{idx}.pt'))
         return data
     
     def get_statistics(self, return_dataframe=False, verbose=True):
@@ -118,11 +123,27 @@ class InOrgMatDatasets(Dataset):
         if stat_path.exists():
             df_stats = pd.read_pickle(stat_path)
         else:
-            df_stats = pd.DataFrame(columns=['# of nodes', '# of edges', '# of elements', 'Crystal type', 'NP size (Å)', 'Elements', 'Split'])
+            df_stats = pd.DataFrame(
+                columns=['# of nodes', 
+                         '# of edges', 
+                         '# of elements', 
+                         'Crystal type', 
+                         'NP size (Å)', 
+                         'Elements', 
+                         'Split',
+                ])
             for data_split in ['Train', 'Val', 'Test']:
                 for idx in range(self.len(split=data_split)):
                     graph = self.get(idx=idx,data_split=data_split)
-                    df_stats.loc[df_stats.shape[0]] = [float(graph.num_nodes), float(graph.num_edges), float(graph.y['n_atomic_species']), graph.y['crystal_type'], graph.y['np_size'], graph.y['atomic_species'], data_split]
+                    df_stats.loc[df_stats.shape[0]] = [
+                        float(graph.num_nodes), 
+                        float(graph.num_edges), 
+                        float(graph.y['n_atomic_species']), 
+                        graph.y['crystal_type'], 
+                        graph.y['np_size'], 
+                        graph.y['atomic_species'], 
+                        data_split,
+                    ]
         
         df_stats.to_pickle(stat_path)
 

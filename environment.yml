@@ -5,7 +5,7 @@ channels:
   - pytorch
   - nvidia
 dependencies:
-  - python=3.7
+  - python=3.10
   - numpy
   - matplotlib
   - pandas
@@ -29,5 +29,6 @@ dependencies:
   - nglview
   - cupy
   - traceback-with-variables
+  - spglib
   pip:
     - stopit

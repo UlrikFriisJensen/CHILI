@@ -25,5 +25,5 @@ generator.create_cif_dataset(
     required_atoms=['O'],
     optional_atoms=metals,
     from_table_values=False,
-    save_folder=datasetPath + '/CIFs/',
+    save_folder=datasetPath + '/CIFs/Simulated/',
 )
