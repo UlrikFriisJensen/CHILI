@@ -105,6 +105,33 @@ class InOrgMatDatasets(Dataset):
         data = torch.load(Path(self.processed_dir).joinpath(f'./data_{idx}.pt'))
         return data
     
+    def create_data_split(self, test_size=0.2, validation_size=None, split_strategy='random', stratify_on='Space group (Number)', random_state=42, return_idx=False):
+        if validation_size is None:
+            validation_size = test_size
+        if split_strategy == 'random':
+            train_idx, test_idx = train_test_split(np.arange(self.len()), test_size=test_size, random_state=random_state)
+            train_idx, validation_idx = train_test_split(train_idx, test_size=validation_size/(1-test_size), random_state=random_state)
+            
+            np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_train.csv'), train_idx, delimiter=',', fmt='%i')
+            np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
+            np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_test.csv'), test_idx, delimiter=',', fmt='%i')
+        elif split_strategy == 'stratified':
+            df_stats = self.get_statistics(return_dataframe=True)
+            train_idx, test_idx = train_test_split(np.arange(self.len()), test_size=test_size, random_state=random_state, stratify=df_stats[stratify_on])
+            train_idx, validation_idx = train_test_split(train_idx, test_size=validation_size/(1-test_size), random_state=random_state, stratify=df_stats.loc[train_idx][stratify_on])
+            
+            np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_train.csv'), train_idx, delimiter=',', fmt='%i')
+            np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
+            np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_test.csv'), test_idx, delimiter=',', fmt='%i')       
+        else:
+            raise ValueError('Split strategy not recognized. Please use either "random" or "stratified"')
+        
+        if return_idx:
+            return train_idx, validation_idx, test_idx
+        else:
+            return None
+        
+    
     def get_statistics(self, return_dataframe=False):
         stat_path = Path(self.processed_dir).joinpath('../datasetStatistics.pkl')
         if stat_path.exists():
