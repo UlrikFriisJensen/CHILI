@@ -16,6 +16,7 @@ import pandas as pd
 
 # Machine Learning imports
 import torch
+from torch.utils.data import Subset
 from torch_geometric.data import Dataset, Data, download_url, extract_zip
 from torch_geometric.utils import to_networkx
 from networkx.algorithms.components import is_connected
@@ -27,6 +28,9 @@ class InOrgMatDatasets(Dataset):
     def __init__(self, dataset, root='./', transform=None, pre_transform=None, pre_filter=None):
         self.dataset = dataset
         root += self.dataset + '/'
+        self.train_set = None
+        self.validation_set = None
+        self.test_set = None
         super().__init__(root, transform, pre_transform, pre_filter)       
 
     @property
@@ -95,43 +99,101 @@ class InOrgMatDatasets(Dataset):
         return None          
 
     def len(self, split=None):
-        if split:
-            length = sum([split in file_path for file_path in self.processed_file_names])
-        else:
+        if split is None:
             length = len(self.processed_file_names)
+        elif split.lower() == 'train':
+            length = len(self.train_set)
+        elif split.lower() in ['validation', 'val']:
+            length = len(self.validation_set)
+        elif split.lower() == 'test':
+            length = len(self.test_set)
+        else:
+            raise ValueError('Split not recognized. Please use either "train", "validation" or "test"')
         return length
 
-    def get(self, idx):
-        data = torch.load(Path(self.processed_dir).joinpath(f'./data_{idx}.pt'))
+    def get(self, idx, split=None):
+        if split is None:
+            data = torch.load(Path(self.processed_dir).joinpath(f'./data_{idx}.pt'))
+        elif split.lower() == 'train':
+            data = self.train_set[idx]
+        elif split.lower() in ['validation', 'val']:
+            data = self.validation_set[idx]
+        elif split.lower() == 'test':
+            data = self.test_set[idx]
+        else:
+            raise ValueError('Split not recognized. Please use either "train", "validation" or "test"')
         return data
     
     def create_data_split(self, test_size=0.2, validation_size=None, split_strategy='random', stratify_on='Space group (Number)', random_state=42, return_idx=False):
+        '''
+        Split the dataset into train, validation and test sets. The indices of the split are saved to csv files in the processed directory.
+        '''
+
         if validation_size is None:
             validation_size = test_size
+
+        df_stats = self.get_statistics(return_dataframe=True)
+
         if split_strategy == 'random':
+            # Split data into train, validation and test sets
             train_idx, test_idx = train_test_split(np.arange(self.len()), test_size=test_size, random_state=random_state)
             train_idx, validation_idx = train_test_split(train_idx, test_size=validation_size/(1-test_size), random_state=random_state)
             
+            # Save indices to csv files
             np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_train.csv'), train_idx, delimiter=',', fmt='%i')
             np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
             np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_test.csv'), test_idx, delimiter=',', fmt='%i')
+            
+            # Update statistics dataframe
+            df_stats[f'{split_strategy.capitalize()} data split'] = ''
+            df_stats[f'{split_strategy.capitalize()} data split'].loc[train_idx] = 'Train'
+            df_stats[f'{split_strategy.capitalize()} data split'].loc[validation_idx] = 'Validation'
+            df_stats[f'{split_strategy.capitalize()} data split'].loc[test_idx] = 'Test'
+
         elif split_strategy == 'stratified':
-            df_stats = self.get_statistics(return_dataframe=True)
+            # Split data into train, validation and test sets
             train_idx, test_idx = train_test_split(np.arange(self.len()), test_size=test_size, random_state=random_state, stratify=df_stats[stratify_on])
             train_idx, validation_idx = train_test_split(train_idx, test_size=validation_size/(1-test_size), random_state=random_state, stratify=df_stats.loc[train_idx][stratify_on])
             
+            # Save indices to csv files
             np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_train.csv'), train_idx, delimiter=',', fmt='%i')
             np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
-            np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_test.csv'), test_idx, delimiter=',', fmt='%i')       
+            np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_test.csv'), test_idx, delimiter=',', fmt='%i')
+
+            # Update statistics dataframe
+            df_stats[f'{split_strategy.capitalize()} data split ({stratify_on})'] = ''
+            df_stats[f'{split_strategy.capitalize()} data split ({stratify_on})'].loc[train_idx] = 'Train'
+            df_stats[f'{split_strategy.capitalize()} data split ({stratify_on})'].loc[validation_idx] = 'Validation'
+            df_stats[f'{split_strategy.capitalize()} data split ({stratify_on})'].loc[test_idx] = 'Test'   
         else:
+            # Raise error if split strategy is not recognized
             raise ValueError('Split strategy not recognized. Please use either "random" or "stratified"')
-        
+
+        # Update statistics file
+        df_stats.to_pickle(Path(self.processed_dir).joinpath('../datasetStatistics.pkl'))
+
         if return_idx:
             return train_idx, validation_idx, test_idx
         else:
             return None
         
-    
+    def load_data_split(self, split_strategy='random', stratify_on='Space group (Number)'):
+        '''
+        Load the indices of the train, validation and test sets from csv files in the processed directory.
+        '''
+
+        # Load indices from csv files
+        train_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_train.csv'), delimiter=',', dtype=int)
+        validation_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_validation.csv'), delimiter=',', dtype=int)
+        test_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_test.csv'), delimiter=',', dtype=int)
+        
+        # Split the dataset into train, validation and test sets
+        self.train_set = Subset(self, train_idx)
+        self.validation_set = Subset(self, validation_idx)
+        self.test_set = Subset(self, test_idx)
+
+        return None
+
     def get_statistics(self, return_dataframe=False):
         stat_path = Path(self.processed_dir).joinpath('../datasetStatistics.pkl')
         if stat_path.exists():
