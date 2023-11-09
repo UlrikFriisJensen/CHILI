@@ -55,11 +55,12 @@ class h5Constructor():
                     
         return p_out == 1
 
-    def gen_single_h5(self, input_tuple, override=False):
+    def gen_single_h5(self, input_tuple, override=False, verbose=False):
         cif, np_radii, device = input_tuple
         # Check if graph has already been made
         if os.path.isfile(f'{self.save_dir}/graph_{cif[:-4]}.h5') and not override:
-            print(f'{cif} h5 file already exists')
+            if verbose:
+                print(f'{cif} h5 file already exists')
             return None
 
         # Load cif
