@@ -23,9 +23,9 @@ sns.set_theme()
 # Periodic table imports
 from mendeleev import element
 
-# Diffpy imports
-from diffpy.structure import Structure
-from diffpy.srreal.pdfcalculator import PDFCalculator
+# # Diffpy imports
+# from diffpy.structure import Structure
+# from diffpy.srreal.pdfcalculator import PDFCalculator
 
 # ASE imports
 from ase import Atoms
@@ -1192,10 +1192,12 @@ class structureGenerator():
             self.calculate_cell_parameter_approximations()
         print('Simulating CIFs')
         for crystal_type in tqdm(crystal_types, desc='Structure types'):
+            print(crystal_type)
             if (n_species == 2) and (crystal_type in ['Perovskite', 'K2NiF4']):
+                print('Here')
                 continue
-            elif ('O' in required_atoms) and (crystal_type in ['NiAs', 'CsCl', 'CdCl2', 'ZincBlende']):
-                continue
+            # elif ('O' in required_atoms) and (crystal_type in ['NiAs', 'CsCl', 'CdCl2', 'ZincBlende']):
+            #     continue
             if from_table_values:
                 for structure in self.parameter_lookup[crystal_type]:
                     atom_list = [re.sub('[1-9]*|H[1-9]*', '', atom) for atom in re.findall('[A-Z][^A-Z]*', structure)]

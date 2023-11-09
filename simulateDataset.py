@@ -45,11 +45,11 @@ for metal in metals:
 
 # Simulate mono-metal oxides
 generator.create_cif_dataset(
-    n_species=required_atoms,
+    n_species=n_species,
     required_atoms=required_atoms,
-    optional_atoms=metals,
+    optional_atoms=optional_atoms,
     from_table_values=False,
-    save_folder=datasetPath + '/CIFs/Simulated/',
+    save_folder=datasetPath + '/CIFs/SimulatedFull/',
 )
 
 #%% Simulate scattering data
