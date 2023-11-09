@@ -1192,9 +1192,7 @@ class structureGenerator():
             self.calculate_cell_parameter_approximations()
         print('Simulating CIFs')
         for crystal_type in tqdm(crystal_types, desc='Structure types'):
-            print(crystal_type)
             if (n_species == 2) and (crystal_type in ['Perovskite', 'K2NiF4']):
-                print('Here')
                 continue
             # elif ('O' in required_atoms) and (crystal_type in ['NiAs', 'CsCl', 'CdCl2', 'ZincBlende']):
             #     continue
