@@ -204,12 +204,15 @@ class h5Constructor():
                 # SANS
                 scattering_size_h5.create_dataset('SANS', data=np.vstack((sans_q, sans_iq[i])))
     
-    def gen_h5s(self, np_radii=[5., 10., 15., 20., 25.], parallelize=True, num_processes=cpu_count() - 1, device=None):
+    def gen_h5s(self, list_of_cifs=None, np_radii=[5., 10., 15., 20., 25.], parallelize=True, num_processes=cpu_count() - 1, device=None):
         #Initialize the number of workers you want to work in parallel. Default is the number of cores -1 to not freeze your pc.
         if device == None:
             device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         
-        inputs = zip(self.cifs, repeat(np_radii), repeat(device))
+        if list_of_cifs == None:
+            inputs = zip(self.cifs, repeat(np_radii), repeat(device))
+        else:
+            inputs = zip(list_of_cifs, repeat(np_radii), repeat(device))
         print('\nConstructing graphs from cif files:')
         if parallelize:
             with Pool(processes=num_processes) as pool:
