@@ -19,8 +19,14 @@ from debyecalculator import DebyeCalculator
 #%% Graph construction
 
 class h5Constructor():
-    def __init__(self, cif_dir, save_dir):
-        self.cif_dir = Path(cif_dir)
+    def __init__(
+        self,
+        cif_paths,
+        save_dir
+    ):
+        # Cif file paths
+        self.cifs = cif_paths
+
         self.save_dir = Path(save_dir)
 
         #Create save directory if it doesn't exist
@@ -28,11 +34,6 @@ class h5Constructor():
             self.save_dir.mkdir(parents=True)
             print("Save directory doesn't exist.\nCreated the save directory at " + str(self.save_dir))
         
-        self.cifs = [str(x.name) for x in self.cif_dir.glob('*.cif')]
-        
-        self.cifs = sorted(self.cifs, key=lambda x: (x.split('_')[1], x.split('_')[0]))
-        
-        self.cif_dir = str(self.cif_dir)
         self.save_dir = str(self.save_dir)
 
     def repeating_unit_mask_attempt2(self, cell_pos, cell_dist, cell_lens, cell_angles):
@@ -57,20 +58,23 @@ class h5Constructor():
 
     def gen_single_h5(self, input_tuple, override=False, verbose=False):
         cif, np_radii, device = input_tuple
+        print('\n', flush=True)
+        print(cif, flush=True)
+        cif_name = cif.split('/')[-1].split('.')[0]
         # Check if graph has already been made
-        if os.path.isfile(f'{self.save_dir}/graph_{cif[:-4]}.h5') and not override:
+        if os.path.isfile(f'{self.save_dir}/graph_{cif_name}.h5') and not override:
             if verbose:
-                print(f'{cif} h5 file already exists')
+                print(f'{cif_name} h5 file already exists')
             return None
 
         # Load cif
-        unit_cell = read(f'{self.cif_dir}/{cif}')
+        unit_cell = read(cif)
         
         # Find space group
         space_group = get_spacegroup(unit_cell)
         
         # Find crystal type
-        cif_name_split = cif.split('_')
+        cif_name_split = cif_name.split('_')
         if len(cif_name_split) > 1:
             crystal_type = cif_name_split[0]
         elif len(cif_name_split) == 1:
@@ -120,7 +124,7 @@ class h5Constructor():
                     element(int(atom[0])).electron_affinity
                 ] 
                 for atom in unit_cell_atoms
-                ])
+                ], dtype='float')
             node_pos_real = unit_cell.get_positions()
             node_pos_relative = unit_cell_pos
 
@@ -128,6 +132,7 @@ class h5Constructor():
         cell_parameters = unit_cell.cell.cellpar()
         
         #Create graph to check for connectivity
+        node_features[node_features == None] = 0.0
         x = torch.tensor(node_features, dtype=torch.float32)
         edge_index = torch.tensor(direction, dtype=torch.long)
         edge_attr = torch.tensor(edge_features, dtype=torch.float32)
@@ -136,32 +141,33 @@ class h5Constructor():
         g = to_networkx(graph, to_undirected=True)
 
         if not is_connected(g):
-            print('\n'+cif + '\n')
+            print('\n'+cif_name + '\n')
             return
         
         ## Setup
         # Create an instance of DebyeCalculator
-        xray_calculator = DebyeCalculator(device=device, qmin=1, qmax=30, qstep=0.01, biso=0.3, rmin=0.0, rmax=30.0, rstep=0.01, radiation_type='xray')
-        neutron_calculator = DebyeCalculator(device=device, qmin=1, qmax=30, qstep=0.01, biso=0.3, rmin=0.0, rmax=30.0, rstep=0.01, radiation_type='neutron')
+        xray_calculator = DebyeCalculator(device=device, qmin=1, qmax=30, qstep=0.1, biso=0.3, rmin=0.0, rmax=55.0, rstep=0.01, radiation_type='xray')
+        neutron_calculator = DebyeCalculator(device=device, qmin=1, qmax=30, qstep=0.1, biso=0.3, rmin=0.0, rmax=55.0, rstep=0.01, radiation_type='neutron')
         
         # Construct discrete particles for simulation of spectra
         # struc_list, size_list = cif_to_NP_GPU(self.cif_dir + '/' + cif, np_radii)
-        struc_list, size_list = xray_calculator.generate_nanoparticles(structure_path=self.cif_dir + '/' + cif, radii=np_radii, sort_atoms=False, disable_pbar=True)
+        #struc_list, size_list = xray_calculator.generate_nanoparticles(structure_path=self.cif_dir + '/' + cif, radii=np_radii, sort_atoms=False, disable_pbar=True)
+        struc_list, size_list = xray_calculator.generate_nanoparticles(structure_path=cif, radii=np_radii, sort_atoms=False, disable_pbar=True)
         
         # Calculate scattering for large Q-range
         x_r, x_q, x_iq, _, _, x_gr = xray_calculator._get_all(struc_list)
         n_r, n_q, n_iq, _, _, n_gr = neutron_calculator._get_all(struc_list)
         
         # Simulation parameters for small Q-range
-        xray_calculator.update_parameters(qmin=0, qmax=3, qstep=0.01)
-        neutron_calculator.update_parameters(qmin=0, qmax=3, qstep=0.01)
+        xray_calculator.update_parameters(qmin=0, qmax=3.0, qstep=0.01)
+        neutron_calculator.update_parameters(qmin=0, qmax=3.0, qstep=0.01)
         
         # Calculate SAS
         saxs_q, saxs_iq = xray_calculator.iq(struc_list)
         sans_q, sans_iq = neutron_calculator.iq(struc_list)
         
         # Construct .h5 file
-        with h5py.File(f'{self.save_dir}/{cif[:-4]}.h5', 'w') as h5_file:
+        with h5py.File(f'{self.save_dir}/{cif_name}.h5', 'w') as h5_file:
             # Save elements for the graph
             graph_h5 = h5_file.require_group('LocalLabels')
             graph_h5.create_dataset('NodeFeatures', data=node_features)
