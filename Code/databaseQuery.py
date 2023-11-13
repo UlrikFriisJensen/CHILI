@@ -7,6 +7,7 @@ import io
 from multiprocessing import Pool, cpu_count
 from itertools import islice, repeat
 from tqdm.auto import tqdm
+import argparse
 
 #%% Functions
 
@@ -87,11 +88,19 @@ def queryCOD(save_folder, included_atoms=None, excluded_atoms=None, batch_size=8
 
 if __name__ == '__main__':
     from cifCleaning import cif_cleaning_pipeline
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--include', nargs ='*', type=str)
+    parser.add_argument('-e', '--exclude', nargs ='*', type=str)
+    args = parser.parse_args()
+    
+    included_atoms = args.include #None if len(args.include) < 1 else args.include
+    excluded_atoms = args.exclude #None if len(args.exclude) < 1 else args.exclude
     
     cif_folder = '../Dataset/CIFs/COD_subset/'
-    included_atoms = None
-    excluded_atoms = ['C']
+    #included_atoms = ['Pd'] #None
+    #excluded_atoms = ['C']
     
-    # queryCOD(cif_folder, included_atoms=included_atoms, excluded_atoms=excluded_atoms)
+    #queryCOD(cif_folder, included_atoms=included_atoms, excluded_atoms=excluded_atoms)
     
     cif_cleaning_pipeline(cif_folder, chunksize=100)
