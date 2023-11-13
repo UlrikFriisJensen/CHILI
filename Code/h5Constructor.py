@@ -32,7 +32,7 @@ class h5Constructor():
         #Create save directory if it doesn't exist
         if not self.save_dir.exists():
             self.save_dir.mkdir(parents=True)
-            print("Save directory doesn't exist.\nCreated the save directory at " + str(self.save_dir))
+            #print("Save directory doesn't exist.\nCreated the save directory at " + str(self.save_dir))
         
         self.save_dir = str(self.save_dir)
 
@@ -56,15 +56,14 @@ class h5Constructor():
                     
         return p_out == 1
 
-    def gen_single_h5(self, input_tuple, override=False, verbose=False):
+    def gen_single_h5(self, input_tuple, override=False, verbose=False, check_connectivity=False, check_periodic=False):
         cif, np_radii, device = input_tuple
-        print('\n', flush=True)
-        print(cif, flush=True)
         cif_name = cif.split('/')[-1].split('.')[0]
+        print(cif_name, flush=True)
         # Check if graph has already been made
-        if os.path.isfile(f'{self.save_dir}/graph_{cif_name}.h5') and not override:
+        if os.path.isfile(f'{self.save_dir}/{cif_name}.h5') and not override:
             if verbose:
-                print(f'{cif_name} h5 file already exists')
+                print(f'{cif_name} h5 file already exists, returning\n', flush=True)
             return None
 
         # Load cif
@@ -81,11 +80,12 @@ class h5Constructor():
             crystal_type = None
         
         # Assert if pbc is true
-        if not np.any(unit_cell.pbc):
-            # TODO figure out what to do with unit cells that are not periodic or partly periodic
-            print('Not periodic')
-            # unit_cell.pbc = (1,1,1)
-            return
+        if check_periodic:
+            if not np.any(unit_cell.pbc):
+                # TODO figure out what to do with unit cells that are not periodic or partly periodic
+                print(f'{cif_name} is not periodic, returning', flush=True)
+                # unit_cell.pbc = (1,1,1)
+                return
 
         # Get distances with MIC (NOTE I don't think this makes a difference as long as pbc=True in the unit cell)
         unit_cell_dist = unit_cell.get_all_distances(mic=True)
@@ -140,9 +140,10 @@ class h5Constructor():
         graph = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
         g = to_networkx(graph, to_undirected=True)
 
-        if not is_connected(g):
-            print('\n'+cif_name + '\n')
-            return
+        if check_connectivity:
+            if not is_connected(g):
+                print(f'{cif_name} is not connected, returning', flush=True)
+                return
         
         ## Setup
         # Create an instance of DebyeCalculator
@@ -216,15 +217,15 @@ class h5Constructor():
             device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         
         inputs = zip(self.cifs, repeat(np_radii), repeat(device))
-        print('\nConstructing graphs from cif files:')
+        #print('\nConstructing graphs from cif files:')
         if parallelize:
             with Pool(processes=num_processes) as pool:
                 #Run the parallized process
-                with tqdm(total=len(self.cifs)) as pbar:
+                with tqdm(total=len(self.cifs), disable=True) as pbar:
                     for _ in pool.imap_unordered(self.gen_single_h5, inputs):
                         pbar.update()
         else:
-            for input_tuple in tqdm(inputs):
+            for input_tuple in tqdm(inputs, disable=True):
                 self.gen_single_h5(input_tuple)
         return None
 
