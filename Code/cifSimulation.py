@@ -1190,8 +1190,10 @@ class structureGenerator():
         for crystal_type in tqdm(crystal_types, desc='Structure types'):
             if (n_species == 2) and (crystal_type in ['Perovskite', 'K2NiF4']):
                 continue
+
             #elif ('O' in required_atoms) and (crystal_type in ['NiAs', 'CsCl', 'CdCl2', 'ZincBlende']):
             #    continue
+
             if from_table_values:
                 for structure in self.parameter_lookup[crystal_type]:
                     atom_list = [re.sub('[1-9]*|H[1-9]*', '', atom) for atom in re.findall('[A-Z][^A-Z]*', structure)]
