@@ -56,7 +56,7 @@ class h5Constructor():
                     
         return p_out == 1
 
-    def gen_single_h5(self, input_tuple, override=False, verbose=False, check_connectivity=False, check_periodic=False):
+    def gen_single_h5(self, input_tuple, override=False, verbose=False, check_connectivity=False, check_periodic=False, use_discrete_particles=True):
         cif, np_radii, device = input_tuple
         cif_name = cif.split('/')[-1].split('.')[0]
         print(cif_name, flush=True)
