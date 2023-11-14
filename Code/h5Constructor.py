@@ -21,12 +21,22 @@ from debyecalculator import DebyeCalculator
 class h5Constructor():
     def __init__(
         self,
-        cif_paths,
-        save_dir
+        save_dir,
+        cif_dir=None,
+        cif_paths=None,
     ):
-        # Cif file paths
-        self.cifs = cif_paths
+        
+        # Find cif files
+        if isinstance(cif_paths, list):
+            self.cifs = cif_paths
+        elif isinstance(cif_dir, str):
+            self.cif_dir = Path(cif_dir)
+            self.cifs = [str(x) for x in self.cif_dir.glob('*.cif')]
+            self.cif_dir = str(self.cif_dir)
+        else:
+            raise ValueError('Either cif_dir or cif_paths must be specified')
 
+        # Save directory
         self.save_dir = Path(save_dir)
 
         #Create save directory if it doesn't exist
@@ -56,7 +66,7 @@ class h5Constructor():
                     
         return p_out == 1
 
-    def gen_single_h5(self, input_tuple, override=False, verbose=False, check_connectivity=False, check_periodic=False, use_discrete_particles=True):
+    def gen_single_h5(self, input_tuple, override=False, verbose=False, check_connectivity=False, check_periodic=False, save_discrete_nps=True):
         cif, np_radii, device = input_tuple
         cif_name = cif.split('/')[-1].split('.')[0]
         print(cif_name, flush=True)
@@ -90,7 +100,6 @@ class h5Constructor():
         # Get distances with MIC (NOTE I don't think this makes a difference as long as pbc=True in the unit cell)
         unit_cell_dist = unit_cell.get_all_distances(mic=True)
         unit_cell_atoms = unit_cell.get_atomic_numbers().reshape(-1, 1)
-        unit_cell_pos = unit_cell.get_scaled_positions()
 
         # Make supercell to get Lattice constant
         supercell = make_supercell(unit_cell, np.diag([2,2,2]))
@@ -126,7 +135,7 @@ class h5Constructor():
                 for atom in unit_cell_atoms
                 ], dtype='float')
             node_pos_real = unit_cell.get_positions()
-            node_pos_relative = unit_cell_pos
+            node_pos_relative = unit_cell.get_scaled_positions()
 
         # Construct cell parameter matrix
         cell_parameters = unit_cell.cell.cellpar()
@@ -137,13 +146,12 @@ class h5Constructor():
         edge_index = torch.tensor(direction, dtype=torch.long)
         edge_attr = torch.tensor(edge_features, dtype=torch.float32)
 
-        graph = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
-        g = to_networkx(graph, to_undirected=True)
-
         if check_connectivity:
+            graph = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
+            g = to_networkx(graph, to_undirected=True)
             if not is_connected(g):
                 print(f'{cif_name} is not connected, returning', flush=True)
-                return
+                return None
         
         ## Setup
         # Create an instance of DebyeCalculator
@@ -151,8 +159,6 @@ class h5Constructor():
         neutron_calculator = DebyeCalculator(device=device, qmin=1, qmax=30, qstep=0.1, biso=0.3, rmin=0.0, rmax=55.0, rstep=0.01, radiation_type='neutron')
         
         # Construct discrete particles for simulation of spectra
-        # struc_list, size_list = cif_to_NP_GPU(self.cif_dir + '/' + cif, np_radii)
-        #struc_list, size_list = xray_calculator.generate_nanoparticles(structure_path=self.cif_dir + '/' + cif, radii=np_radii, sort_atoms=False, disable_pbar=True)
         struc_list, size_list = xray_calculator.generate_nanoparticles(structure_path=cif, radii=np_radii, sort_atoms=False, disable_pbar=True)
         
         # Calculate scattering for large Q-range
@@ -169,14 +175,7 @@ class h5Constructor():
         
         # Construct .h5 file
         with h5py.File(f'{self.save_dir}/{cif_name}.h5', 'w') as h5_file:
-            # Save elements for the graph
-            graph_h5 = h5_file.require_group('LocalLabels')
-            graph_h5.create_dataset('NodeFeatures', data=node_features)
-            graph_h5.create_dataset('EdgeFeatures', data=edge_features)
-            graph_h5.create_dataset('EdgeDirections', data=direction)
-            graph_h5.create_dataset('FractionalCoordinates', data=node_pos_relative)
-            graph_h5.create_dataset('Coordinates', data=node_pos_real)
-            
+            # Save global labels for the graph
             params_h5 = h5_file.require_group('GlobalLabels')
             params_h5.create_dataset('CellParameters', data=cell_parameters)
             params_h5.create_dataset('CrystalType', data=crystal_type)
@@ -184,12 +183,67 @@ class h5Constructor():
             params_h5.create_dataset('SpaceGroupNumber', data=space_group.no)
             params_h5.create_dataset('ElementsPresent', data=np.unique(node_features[:,0]))
 
+            # Save unit cell graph
+            graph_h5 = h5_file.require_group('UnitCellGraph')
+            graph_h5.create_dataset('NodeFeatures', data=node_features)
+            graph_h5.create_dataset('EdgeFeatures', data=edge_features)
+            graph_h5.create_dataset('EdgeDirections', data=direction)
+            graph_h5.create_dataset('FractionalCoordinates', data=node_pos_relative)
+            graph_h5.create_dataset('Coordinates', data=node_pos_real)
+
+            if save_discrete_nps:
+                # Save discrete particle graphs
+                npgraphs_h5 = h5_file.require_group('DiscreteParticleGraphs')
+
+                for i, discrete_np in enumerate(struc_list):
+                    # Differentiate graphs by NP size
+                    npgraph_size_h5 = npgraphs_h5.require_group(f'{size_list[i]:.2f}Å')
+                    npgraph_size_h5.create_dataset('NP size (Å)', data=size_list[i])
+
+                    # Get distances with MIC (NOTE I don't think this makes a difference as long as pbc=True in the unit cell)
+                    np_dists = discrete_np.get_all_distances(mic=True)
+                    np_atoms = discrete_np.get_atomic_numbers().reshape(-1, 1)
+
+                    # Find lattice constant
+                    metal_distances = discrete_np[discrete_np.get_atomic_numbers() != 8].get_all_distances()
+                    lc = np.amin(metal_distances[metal_distances > 0.])
+
+                    # Create edges and node features
+                    lc_mask = (np_dists > 0) & (np_dists < lc)
+                    oxy_mask = np.outer(np_atoms == 8, np_atoms == 8)
+                    metal_mask = np.outer(np_atoms != 8, np_atoms !=8)
+                    direction = np.argwhere(lc_mask & ~oxy_mask & ~metal_mask).T
+
+                    edge_features = np_dists[lc_mask]
+                    node_features = np.array([
+                        [
+                            element(int(atom[0])).atomic_number, 
+                            element(int(atom[0])).atomic_radius, 
+                            element(int(atom[0])).atomic_weight, 
+                            element(int(atom[0])).electron_affinity
+                        ] 
+                        for atom in np_atoms
+                        ], dtype='float')
+                    node_pos_real = discrete_np.get_positions()
+                    node_pos_relative = discrete_np.get_scaled_positions()
+
+                    # Convert to torch tensors
+                    node_features[node_features == None] = 0.0
+                    x = torch.tensor(node_features, dtype=torch.float32)
+                    edge_index = torch.tensor(direction, dtype=torch.long)
+                    edge_attr = torch.tensor(edge_features, dtype=torch.float32)
+
+                    npgraph_size_h5.create_dataset('NodeFeatures', data=node_features)
+                    npgraph_size_h5.create_dataset('EdgeFeatures', data=edge_features)
+                    npgraph_size_h5.create_dataset('EdgeDirections', data=direction)
+                    npgraph_size_h5.create_dataset('FractionalCoordinates', data=node_pos_relative)
+                    npgraph_size_h5.create_dataset('Coordinates', data=node_pos_real)
+            
             # Save scattering data
             scattering_h5 = h5_file.require_group('ScatteringData')
-            
-            ## Simulate scattering data
+
             for i, np_size in enumerate(size_list):
-                # Differentiate spectra by size
+                # Differentiate scattering data by NP size
                 scattering_size_h5 = scattering_h5.require_group(f'{np_size:.2f}Å')
                 scattering_size_h5.create_dataset('NP size (Å)', data=np_size)
                 
@@ -210,8 +264,10 @@ class h5Constructor():
                 
                 # SANS
                 scattering_size_h5.create_dataset('SANS', data=np.vstack((sans_q, sans_iq[i])))
+
+        return None
     
-    def gen_h5s(self, list_of_cifs=None, np_radii=[5., 10., 15., 20., 25.], parallelize=True, num_processes=cpu_count() - 1, device=None):
+    def gen_h5s(self, np_radii=[5., 10., 15., 20., 25.], parallelize=True, num_processes=cpu_count() - 1, device=None):
         #Initialize the number of workers you want to work in parallel. Default is the number of cores -1 to not freeze your pc.
         if device == None:
             device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
