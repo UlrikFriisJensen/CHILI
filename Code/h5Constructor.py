@@ -21,12 +21,22 @@ from debyecalculator import DebyeCalculator
 class h5Constructor():
     def __init__(
         self,
-        cif_paths,
-        save_dir
+        save_dir,
+        cif_dir=None,
+        cif_paths=None,
     ):
-        # Cif file paths
-        self.cifs = cif_paths
+        
+        # Find cif files
+        if isinstance(cif_paths, list):
+            self.cifs = cif_paths
+        elif isinstance(cif_dir, str):
+            self.cif_dir = Path(cif_dir)
+            self.cifs = [str(x) for x in self.cif_dir.glob('*.cif')]
+            self.cif_dir = str(self.cif_dir)
+        else:
+            raise ValueError('Either cif_dir or cif_paths must be specified')
 
+        # Save directory
         self.save_dir = Path(save_dir)
 
         #Create save directory if it doesn't exist
@@ -56,7 +66,7 @@ class h5Constructor():
                     
         return p_out == 1
 
-    def gen_single_h5(self, input_tuple, override=False, verbose=False, check_connectivity=False, check_periodic=False, save_discrete_nps=False):
+    def gen_single_h5(self, input_tuple, override=False, verbose=False, check_connectivity=False, check_periodic=False, save_discrete_nps=True):
         cif, np_radii, device = input_tuple
         cif_name = cif.split('/')[-1].split('.')[0]
         print(cif_name, flush=True)
@@ -187,8 +197,8 @@ class h5Constructor():
 
                 for i, discrete_np in enumerate(struc_list):
                     # Differentiate graphs by NP size
-                    npgraph_size_h5 = npgraphs_h5.require_group(f'{np_size:.2f}Å')
-                    npgraph_size_h5.create_dataset('NP size (Å)', data=np_size)
+                    npgraph_size_h5 = npgraphs_h5.require_group(f'{size_list[i]:.2f}Å')
+                    npgraph_size_h5.create_dataset('NP size (Å)', data=size_list[i])
 
                     # Get distances with MIC (NOTE I don't think this makes a difference as long as pbc=True in the unit cell)
                     np_dists = discrete_np.get_all_distances(mic=True)
@@ -257,7 +267,7 @@ class h5Constructor():
 
         return None
     
-    def gen_h5s(self, list_of_cifs=None, np_radii=[5., 10., 15., 20., 25.], parallelize=True, num_processes=cpu_count() - 1, device=None):
+    def gen_h5s(self, np_radii=[5., 10., 15., 20., 25.], parallelize=True, num_processes=cpu_count() - 1, device=None):
         #Initialize the number of workers you want to work in parallel. Default is the number of cores -1 to not freeze your pc.
         if device == None:
             device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
