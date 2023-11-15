@@ -56,12 +56,12 @@ class InOrgMatDatasets(Dataset):
         for raw_path in self.raw_paths:
             # Read data from `raw_path`.
             with h5py.File(raw_path, 'r') as h5f:
-                # Read graph attributes
-                node_feat = torch.tensor(h5f['UnitCellGraph']['NodeFeatures'][:], dtype=torch.float32)
-                edge_index = torch.tensor(h5f['UnitCellGraph']['EdgeDirections'][:], dtype=torch.long)
-                edge_feat = torch.tensor(h5f['UnitCellGraph']['EdgeFeatures'][:], dtype=torch.float32)
-                pos_abs = torch.tensor(h5f['UnitCellGraph']['AbsoluteCoordinates'][:], dtype=torch.float32)
-                pos_frac = torch.tensor(h5f['UnitCellGraph']['FractionalCoordinates'][:], dtype=torch.float32)
+                # Read unit cell graph attributes
+                unit_cell_node_feat = torch.tensor(h5f['UnitCellGraph']['NodeFeatures'][:], dtype=torch.float32)
+                unit_cell_edge_index = torch.tensor(h5f['UnitCellGraph']['EdgeDirections'][:], dtype=torch.long)
+                unit_cell_edge_feat = torch.tensor(h5f['UnitCellGraph']['EdgeFeatures'][:], dtype=torch.float32)
+                unit_cell_pos_abs = torch.tensor(h5f['UnitCellGraph']['AbsoluteCoordinates'][:], dtype=torch.float32)
+                unit_cell_pos_frac = torch.tensor(h5f['UnitCellGraph']['FractionalCoordinates'][:], dtype=torch.float32)
                 # Read other labels
                 cell_params = torch.tensor(h5f['GlobalLabels']['CellParameters'][:], dtype=torch.float32)
                 atomic_species = torch.tensor(h5f['GlobalLabels']['ElementsPresent'][:], dtype=torch.float32)
@@ -69,15 +69,33 @@ class InOrgMatDatasets(Dataset):
                 space_group_symbol = h5f['GlobalLabels']['SpaceGroupSymbol'][()].decode()
                 space_group_number = h5f['GlobalLabels']['SpaceGroupNumber'][()]
                 # Read scattering data
-                for key in h5f['ScatteringData'].keys():
+                for key in h5f['DiscreteParticleGraphs'].keys():
+                    # Read discrete particle graph attributes
+                    node_feat = torch.tensor(h5f['DiscreteParticleGraphs'][key]['NodeFeatures'][:], dtype=torch.float32)
+                    edge_index = torch.tensor(h5f['DiscreteParticleGraphs'][key]['EdgeDirections'][:], dtype=torch.long)
+                    edge_feat = torch.tensor(h5f['DiscreteParticleGraphs'][key]['EdgeFeatures'][:], dtype=torch.float32)
+                    pos_abs = torch.tensor(h5f['DiscreteParticleGraphs'][key]['AbsoluteCoordinates'][:], dtype=torch.float32)
+                    pos_frac = torch.tensor(h5f['DiscreteParticleGraphs'][key]['FractionalCoordinates'][:], dtype=torch.float32)
+                    
+                    # Create target dictionary
                     target_dict = dict(
+                        # Save global labels
                         crystal_type = crystal_type,
                         space_group_symbol = space_group_symbol,
                         space_group_number = space_group_number,
                         atomic_species = atomic_species,
                         n_atomic_species = len(atomic_species),
-                        cell_params = cell_params,
                         np_size = h5f['ScatteringData'][key]['NP size (Å)'][()],
+                        n_atoms = node_feat.shape[0],
+                        n_bonds = edge_index.shape[1],
+                        # Save unit cell graph attributes
+                        cell_params = cell_params,
+                        unit_cell_node_feat = unit_cell_node_feat,
+                        unit_cell_edge_index = unit_cell_edge_index,
+                        unit_cell_edge_feat = unit_cell_edge_feat,
+                        unit_cell_pos_abs = unit_cell_pos_abs,
+                        unit_cell_pos_frac = unit_cell_pos_frac,
+                        # Save scattering data
                         nd = torch.tensor(h5f['ScatteringData'][key]['ND'][:], dtype=torch.float32),
                         xrd = torch.tensor(h5f['ScatteringData'][key]['XRD'][:], dtype=torch.float32),
                         nPDF = torch.tensor(h5f['ScatteringData'][key]['nPDF'][:], dtype=torch.float32),
@@ -86,15 +104,21 @@ class InOrgMatDatasets(Dataset):
                         saxs = torch.tensor(h5f['ScatteringData'][key]['SAXS'][:], dtype=torch.float32),
                     )
                     
+                    # Create graph data object
                     data = Data(x=node_feat, edge_index=edge_index, edge_attr=edge_feat, pos_frac=pos_frac, pos_abs=pos_abs, y=target_dict)
 
+                    # Apply filters
                     if self.pre_filter is not None and not self.pre_filter(data):
                         continue
-
+                    
+                    # Apply transforms
                     if self.pre_transform is not None:
                         data = self.pre_transform(data)
                     
+                    # Save to `self.processed_dir`.
                     torch.save(data, Path(self.processed_dir).joinpath(f'./data_{idx}.pt'))
+                    
+                    # Update index
                     idx += 1
         return None          
 
@@ -181,16 +205,26 @@ class InOrgMatDatasets(Dataset):
         '''
         Load the indices of the train, validation and test sets from csv files in the processed directory.
         '''
-
-        # Load indices from csv files
-        train_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_train.csv'), delimiter=',', dtype=int)
-        validation_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_validation.csv'), delimiter=',', dtype=int)
-        test_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_test.csv'), delimiter=',', dtype=int)
-        
-        # Split the dataset into train, validation and test sets
-        self.train_set = Subset(self, train_idx)
-        self.validation_set = Subset(self, validation_idx)
-        self.test_set = Subset(self, test_idx)
+        if split_strategy == 'random':
+            # Load indices from csv files
+            train_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_train.csv'), delimiter=',', dtype=int)
+            validation_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_validation.csv'), delimiter=',', dtype=int)
+            test_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_test.csv'), delimiter=',', dtype=int)
+            
+            # Split the dataset into train, validation and test sets
+            self.train_set = Subset(self, train_idx)
+            self.validation_set = Subset(self, validation_idx)
+            self.test_set = Subset(self, test_idx)
+        elif split_strategy == 'stratified':
+            # Load indices from csv files
+            train_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_train.csv'), delimiter=',', dtype=int)
+            validation_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_validation.csv'), delimiter=',', dtype=int)
+            test_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_test.csv'), delimiter=',', dtype=int)
+            
+            # Split the dataset into train, validation and test sets
+            self.train_set = Subset(self, train_idx)
+            self.validation_set = Subset(self, validation_idx)
+            self.test_set = Subset(self, test_idx)
 
         return None
 
