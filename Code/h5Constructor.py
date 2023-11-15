@@ -189,7 +189,7 @@ class h5Constructor():
             graph_h5.create_dataset('EdgeFeatures', data=edge_features)
             graph_h5.create_dataset('EdgeDirections', data=direction)
             graph_h5.create_dataset('FractionalCoordinates', data=node_pos_relative)
-            graph_h5.create_dataset('Coordinates', data=node_pos_real)
+            graph_h5.create_dataset('AbsoluteCoordinates', data=node_pos_real)
 
             if save_discrete_nps:
                 # Save discrete particle graphs
@@ -237,7 +237,7 @@ class h5Constructor():
                     npgraph_size_h5.create_dataset('EdgeFeatures', data=edge_features)
                     npgraph_size_h5.create_dataset('EdgeDirections', data=direction)
                     npgraph_size_h5.create_dataset('FractionalCoordinates', data=node_pos_relative)
-                    npgraph_size_h5.create_dataset('Coordinates', data=node_pos_real)
+                    npgraph_size_h5.create_dataset('AbsoluteCoordinates', data=node_pos_real)
             
             # Save scattering data
             scattering_h5 = h5_file.require_group('ScatteringData')

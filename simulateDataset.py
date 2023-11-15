@@ -7,7 +7,6 @@ from elements import elements
 from mendeleev import element
 from Code.cifSimulation import structureGenerator
 
-#from Code.h5Constructor import h5Constructor
 import argparse
 
 def main(args):

@@ -38,7 +38,7 @@ class structureGenerator():
     def __init__(self) -> None:
         # Cell parameters from chapter 1 of Solid State Chemistry by West
         self.parameter_lookup = dict(
-            NaCl = dict(
+            RockSalt = dict(
                 MgO = dict(a=4.213),
                 CaO = dict(a=4.8105),
                 SrO = dict(a=5.160),
@@ -165,7 +165,7 @@ class structureGenerator():
                 SiC = dict(a=3.076, c=5.048, w=0.375),
                 MnSe = dict(a=4.12, c=6.72, w=0.375),
             ),
-            NiAs = dict(
+            NickelArsenide = dict(
                 NiS = dict(a=3.4392, c=5.3484),
                 NiAs = dict(a=3.602, c=5.009),
                 NiSb = dict(a=3.94, c=5.14),
@@ -193,7 +193,7 @@ class structureGenerator():
                 PtSb = dict(a=4.130, c=5.472),
                 PtBi = dict(a=4.315, c=5.490),
             ),
-            CsCl = {
+            CaesiumChloride = {
                 'CsCl': dict(a=4.123),
                 'CsBr': dict(a=4.286),
                 'CsI': dict(a=4.5667),
@@ -235,7 +235,7 @@ class structureGenerator():
                 TaO2 = dict(a=4.709, c=3.065, x=0.3),
                 WO2 = dict(a=4.86, c=2.77, x=0.3),
             ),
-            CdI2 = {
+            CadmiumIodide = {
                 'CdI2': dict(a=4.24, c=6.84),
                 'CaI2': dict(a=4.48, c=6.96),
                 'CoI2': dict(a=3.96, c=6.65),
@@ -263,7 +263,7 @@ class structureGenerator():
                 'Ni(OH)2': dict(a=3.117, c=4.595),
                 'Cd(OH)2': dict(a=3.48, c=4.67),
             },
-            CdCl2 = dict(
+            CadmiumChloride = dict(
                 CdCl2 = dict(a=3.854, c=17.457, anti=False),
                 CdBr2 = dict(a=3.95, c=18.67, anti=False),
                 CoCl2 = dict(a=3.544, c=17.430, anti=False),
@@ -298,7 +298,7 @@ class structureGenerator():
                 CsHgBr3 = dict(a=5.77),
                 CsHgCl3 = dict(a=5.44),
             ),
-            ReO3 = dict(
+            RheniumTrioxide = dict(
                 ReO3 = dict(a=3.734),
                 UO3 = dict(a=4.156),
                 MoF3 = dict(a=3.8985),
@@ -328,7 +328,7 @@ class structureGenerator():
                 # LiZnSbO4 = dict(charges=(1,2,5), a=8.55, structure='Li in tet'),
                 # LiCoSbO4 = dict(charges=(1,2,5), a=8.56, structure='Li in tet'),
             ),
-            K2NiF4 = dict(
+            PotassiumTetrafluorideNickelate = dict(
                 K2NiF4 = dict(a=4.006, c=13.076, z_M_ion=0.352, z_anion=0.151),
                 K2CuF4 = dict(a=4.155, c=12.74, z_M_ion=0.356, z_anion=0.153),
                 Ba2SnO4 = dict(a=4.140, c=13.295, z_M_ion=0.355, z_anion=0.155),
@@ -441,7 +441,7 @@ class structureGenerator():
     
     def estimate_cell_parameters(self, crystal_type, compound, hea_mean_radius=None):
         atom_list = [re.sub('[1-9]*|H[1-9]+', '', atom) for atom in re.findall('[A-Z][^A-Z]*', compound)]
-        if crystal_type in ['NaCl', 'ZincBlende', 'CsCl']:
+        if crystal_type in ['RockSalt', 'ZincBlende', 'CaesiumChloride']:
             atom_occurence = [1, 1]
             if not hea_mean_radius:
                 atom_radii = [self.get_radius(atom) for atom in atom_list]
@@ -492,7 +492,7 @@ class structureGenerator():
                 c=radii_sum * fit_params_c[0] + fit_params_c[1],
                 w=0.375,
             )
-        elif crystal_type == 'NiAs':
+        elif crystal_type == 'NickelArsenide':
             atom_occurence = [1, 1]
             if not hea_mean_radius:
                 atom_radii = [self.get_radius(atom) for atom in atom_list]
@@ -521,7 +521,7 @@ class structureGenerator():
                 c=radii_sum * fit_params_c[0] + fit_params_c[1],
                 x=0.3,
             )
-        elif crystal_type == 'CdI2':
+        elif crystal_type == 'CadmiumIodide':
             atom_occurence = [1, 2]
             if not hea_mean_radius:
                 atom_radii = [self.get_radius(atom) for atom in atom_list]
@@ -535,7 +535,7 @@ class structureGenerator():
                 a=radii_sum * fit_params_a[0] + fit_params_a[1],
                 c=radii_sum * fit_params_c[0] + fit_params_c[1],
             )
-        elif crystal_type == 'CdCl2':
+        elif crystal_type == 'CadmiumChloride':
             atom_occurence = [1, 2]
             if not hea_mean_radius:
                 atom_radii = [self.get_radius(atom) for atom in atom_list]
@@ -562,7 +562,7 @@ class structureGenerator():
             cellparams = dict(
                 a=radii_sum * fit_params[0] + fit_params[1],
             )
-        elif crystal_type == 'ReO3':
+        elif crystal_type == 'RheniumTrioxide':
             atom_occurence = [1, 3]
             if not hea_mean_radius:
                 atom_radii = [self.get_radius(atom) for atom in atom_list]
@@ -588,7 +588,7 @@ class structureGenerator():
                 structure='Normal',
                 charges=(2,3),
             )
-        elif crystal_type == 'K2NiF4':
+        elif crystal_type == 'PotassiumTetrafluorideNickelate':
             atom_occurence = [2, 1, 4]
             if not hea_mean_radius:
                 atom_radii = [self.get_radius(atom) for atom in atom_list]
@@ -608,10 +608,10 @@ class structureGenerator():
             raise NameError(
                 f'''"{crystal_type}" is not a valid crystal type!
             Valid crystal types are:
-            [SC, FCC, BCC, SH, HCP, DIA, NaCl, 
+            [SC, FCC, BCC, SH, HCP, DIA, RockSalt, 
             ZincBlende, Fluorite, AntiFluorite, 
-            Wurtzite, NiAs, CsCl, Rutile, CdI2, 
-            CdCl2, Perovskite, ReO3, Spinel, K2NiF4]
+            Wurtzite, NickelArsenide, CaesiumChloride, Rutile, CadmiumIodide, 
+            CadmiumChloride, Perovskite, RheniumTrioxide, Spinel, PotassiumTetrafluorideNickelate]
                 '''
                 )
         return compound, cellparams
@@ -835,7 +835,7 @@ class structureGenerator():
                 ], 
                 size=size
             )
-        elif crystal_type == 'NaCl':
+        elif crystal_type == 'RockSalt':
             cell = crystal(
                 compound, 
                 basis=[
@@ -927,7 +927,7 @@ class structureGenerator():
                 ], 
                 size=size
             )
-        elif crystal_type == 'NiAs':
+        elif crystal_type == 'NickelArsenide':
             cell = crystal(
                 compound, 
                 basis=[
@@ -945,7 +945,7 @@ class structureGenerator():
                 ], 
                 size=size
             )
-        elif crystal_type == 'CsCl':
+        elif crystal_type == 'CaesiumChloride':
             cell = crystal(
                 compound, 
                 basis=[
@@ -981,7 +981,7 @@ class structureGenerator():
                 ], 
                 size=size
             )
-        elif crystal_type == 'CdI2':
+        elif crystal_type == 'CadmiumIodide':
             cell = crystal(
                 compound, 
                 basis=[
@@ -999,7 +999,7 @@ class structureGenerator():
                 ], 
                 size=size
             )
-        elif crystal_type == 'CdCl2':
+        elif crystal_type == 'CadmiumChloride':
             if cellparams['anti']:
                 basis=[
                     # (0., 0., 0.26),
@@ -1044,7 +1044,7 @@ class structureGenerator():
                 ], 
                 size=size
             )
-        elif crystal_type == 'ReO3':
+        elif crystal_type == 'RheniumTrioxide':
             cell = crystal(
                 compound, 
                 basis=[
@@ -1091,7 +1091,7 @@ class structureGenerator():
                 raise NotImplementedError
             elif cellparams['structure'] == 'Li in tet':
                 raise NotImplementedError
-        elif crystal_type == 'K2NiF4':
+        elif crystal_type == 'PotassiumTetrafluorideNickelate':
             cell = crystal(
                 compound + '2', 
                 basis=[
@@ -1115,10 +1115,10 @@ class structureGenerator():
             raise NameError(
                 f'''"{crystal_type}" is not a valid crystal type!
             Valid crystal types are:
-            [SC, FCC, BCC, SH, HCP, DIA, NaCl, 
+            [SC, FCC, BCC, SH, HCP, DIA, RockSalt, 
             ZincBlende, Fluorite, AntiFluorite, 
-            Wurtzite, NiAs, CsCl, Rutile, CdI2, 
-            CdCl2, Perovskite, ReO3, Spinel, K2NiF4]
+            Wurtzite, NickelArsenide, CaesiumChloride, Rutile, CadmiumIodide, 
+            CadmiumChloride, Perovskite, RheniumTrioxide, Spinel, PotassiumTetrafluorideNickelate]
                 '''
                 )
         if return_name:
@@ -1188,10 +1188,10 @@ class structureGenerator():
             self.calculate_cell_parameter_approximations()
         print('Simulating CIFs')
         for crystal_type in tqdm(crystal_types, desc='Structure types'):
-            if (n_species == 2) and (crystal_type in ['Perovskite', 'K2NiF4']):
+            if (n_species == 2) and (crystal_type in ['Perovskite', 'PotassiumTetrafluorideNickelate']):
                 continue
 
-            #elif ('O' in required_atoms) and (crystal_type in ['NiAs', 'CsCl', 'CdCl2', 'ZincBlende']):
+            #elif ('O' in required_atoms) and (crystal_type in ['NickelArsenide', 'CaesiumChloride', 'CadmiumChloride', 'ZincBlende']):
             #    continue
 
             if from_table_values:

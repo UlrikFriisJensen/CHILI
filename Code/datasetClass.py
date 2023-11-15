@@ -57,11 +57,11 @@ class InOrgMatDatasets(Dataset):
             # Read data from `raw_path`.
             with h5py.File(raw_path, 'r') as h5f:
                 # Read graph attributes
-                node_feat = torch.tensor(h5f['LocalLabels']['NodeFeatures'][:], dtype=torch.float32)
-                edge_index = torch.tensor(h5f['LocalLabels']['EdgeDirections'][:], dtype=torch.long)
-                edge_feat = torch.tensor(h5f['LocalLabels']['EdgeFeatures'][:], dtype=torch.float32)
-                pos_real = torch.tensor(h5f['LocalLabels']['Coordinates'][:], dtype=torch.float32)
-                pos_frac = torch.tensor(h5f['LocalLabels']['FractionalCoordinates'][:], dtype=torch.float32)
+                node_feat = torch.tensor(h5f['UnitCellGraph']['NodeFeatures'][:], dtype=torch.float32)
+                edge_index = torch.tensor(h5f['UnitCellGraph']['EdgeDirections'][:], dtype=torch.long)
+                edge_feat = torch.tensor(h5f['UnitCellGraph']['EdgeFeatures'][:], dtype=torch.float32)
+                pos_abs = torch.tensor(h5f['UnitCellGraph']['AbsoluteCoordinates'][:], dtype=torch.float32)
+                pos_frac = torch.tensor(h5f['UnitCellGraph']['FractionalCoordinates'][:], dtype=torch.float32)
                 # Read other labels
                 cell_params = torch.tensor(h5f['GlobalLabels']['CellParameters'][:], dtype=torch.float32)
                 atomic_species = torch.tensor(h5f['GlobalLabels']['ElementsPresent'][:], dtype=torch.float32)
@@ -86,7 +86,7 @@ class InOrgMatDatasets(Dataset):
                         saxs = torch.tensor(h5f['ScatteringData'][key]['SAXS'][:], dtype=torch.float32),
                     )
                     
-                    data = Data(x=node_feat, edge_index=edge_index, edge_attr=edge_feat, pos=pos_frac, pos_real=pos_real, y=target_dict)
+                    data = Data(x=node_feat, edge_index=edge_index, edge_attr=edge_feat, pos_frac=pos_frac, pos_abs=pos_abs, y=target_dict)
 
                     if self.pre_filter is not None and not self.pre_filter(data):
                         continue
