@@ -1,6 +1,7 @@
 #%% Imports
 import os, sys, math, torch
 from mendeleev import element
+from mendeleev.fetch import fetch_table
 import numpy as np
 from tqdm.auto import tqdm
 import h5py
@@ -67,7 +68,7 @@ class h5Constructor():
         return p_out == 1
 
     def gen_single_h5(self, input_tuple, override=False, verbose=False, check_connectivity=False, check_periodic=False, save_discrete_nps=True):
-        cif, np_radii, device = input_tuple
+        cif, np_radii, device, node_feature_table = input_tuple
         cif_name = cif.split('/')[-1].split('.')[0]
         print(cif_name, flush=True)
         # Check if graph has already been made
@@ -126,12 +127,7 @@ class h5Constructor():
         else:
             edge_features = unit_cell_dist[lc_mask]
             node_features = np.array([
-                [
-                    element(int(atom[0])).atomic_number, 
-                    element(int(atom[0])).atomic_radius, 
-                    element(int(atom[0])).atomic_weight, 
-                    element(int(atom[0])).electron_affinity
-                ] 
+                node_feature_table.loc[atom[0]].values
                 for atom in unit_cell_atoms
                 ], dtype='float')
             node_pos_real = unit_cell.get_positions()
@@ -216,12 +212,7 @@ class h5Constructor():
 
                     edge_features = np_dists[lc_mask]
                     node_features = np.array([
-                        [
-                            element(int(atom[0])).atomic_number, 
-                            element(int(atom[0])).atomic_radius, 
-                            element(int(atom[0])).atomic_weight, 
-                            element(int(atom[0])).electron_affinity
-                        ] 
+                        node_feature_table.loc[atom[0]].values
                         for atom in np_atoms
                         ], dtype='float')
                     node_pos_real = discrete_np.get_positions()
@@ -272,7 +263,11 @@ class h5Constructor():
         if device == None:
             device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         
-        inputs = zip(self.cifs, repeat(np_radii), repeat(device))
+        # Fetch node features and replace NaNs with 0.0
+        node_feature_table = fetch_table('elements')[['atomic_number', 'atomic_radius', 'atomic_weight', 'electron_affinity']]
+        node_feature_table['electron_affinity'].fillna(0.0, inplace=True)
+        
+        inputs = zip(self.cifs, repeat(np_radii), repeat(device), repeat(node_feature_table))
         #print('\nConstructing graphs from cif files:')
 
         if parallelize:
