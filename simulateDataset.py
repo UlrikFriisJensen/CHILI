@@ -28,6 +28,7 @@ def main(args):
     metals += [atom.Symbol for atom in elements.Transition_Metals] 
     metals += [atom.Symbol for atom in elements.Metalloids] 
     metals += [atom.Symbol for atom in elements.Others]
+    metals += [atom.Symbol for atom in elements.Rare_Earth_Elements]
     
     optional_atoms = []
     for metal in metals:

@@ -196,8 +196,7 @@ class h5Constructor():
                     npgraph_size_h5 = npgraphs_h5.require_group(f'{size_list[i]:.2f}Å')
                     npgraph_size_h5.create_dataset('NP size (Å)', data=size_list[i])
 
-                    # Get distances with MIC (NOTE I don't think this makes a difference as long as pbc=True in the unit cell)
-                    np_dists = discrete_np.get_all_distances(mic=True)
+                    np_dists = discrete_np.get_all_distances(mic=False)
                     np_atoms = discrete_np.get_atomic_numbers().reshape(-1, 1)
 
                     # Find lattice constant
