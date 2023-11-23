@@ -55,25 +55,29 @@ def downloadFromCOD(input_tuple):
                     zip_file.extractall(save_folder)
     return len(id_batch)
 
-def queryCOD(save_folder, included_atoms=None, excluded_atoms=None, batch_size=800, n_processes=cpu_count() - 1):
+def queryCOD(save_folder, included_atoms=None, excluded_atoms=None, batch_size=800, n_processes=cpu_count() - 1, id_file=None):
     if not Path(save_folder).exists():
         Path(save_folder).mkdir(parents=True)
     
-    id_url = 'https://www.crystallography.net/cod/result?format=lst'
-    if included_atoms:
-        for i, included_atom in enumerate(included_atoms):
-            id_url += f'&el{i+1}={included_atom}'
-    if excluded_atoms:
-        for i, excluded_atom in enumerate(excluded_atoms):
-            id_url += f'&nel{i+1}={excluded_atom}'
-    print('Requesting CIF IDs')
-    id_response = requests.get(id_url)
-    
-    with open(f'{save_folder}cif_IDs.txt', 'w') as file:
-        file.write(id_response.text)
+    if not id_file:
+        id_url = 'https://www.crystallography.net/cod/result?format=lst'
+        if included_atoms:
+            for i, included_atom in enumerate(included_atoms):
+                id_url += f'&el{i+1}={included_atom}'
+        if excluded_atoms:
+            for i, excluded_atom in enumerate(excluded_atoms):
+                id_url += f'&nel{i+1}={excluded_atom}'
+        print('Requesting CIF IDs')
+        id_response = requests.get(id_url)
         
-    with open(f'{save_folder}cif_IDs.txt', 'r') as file:
-        ids = file.readlines()
+        with open(f'{save_folder}cif_IDs.txt', 'w') as file:
+            file.write(id_response.text)
+            
+        with open(f'{save_folder}cif_IDs.txt', 'r') as file:
+            ids = file.readlines()
+    else:
+        with open(id_file, 'r') as file:
+            ids = file.readlines()
     
     inputs = zip(batched(ids, batch_size), repeat(save_folder), repeat(batch_size))
     
@@ -81,8 +85,9 @@ def queryCOD(save_folder, included_atoms=None, excluded_atoms=None, batch_size=8
         with tqdm(total=len(ids), desc='Downloading CIFs') as pbar:
             for n_ids in pool.imap_unordered(downloadFromCOD, inputs, chunksize=1):
                 pbar.update(n=n_ids)
-            
-    Path(f'{save_folder}cif_IDs.txt').unlink()
+
+    if not id_file:       
+        Path(f'{save_folder}cif_IDs.txt').unlink()
     
     return None
 
