@@ -229,7 +229,7 @@ def remove_duplicate_cifs(metadata):
     
     return None
 
-def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, verbose=True, unwanted_atoms=None, n_processes=cpu_count() - 1, chunksize=100):
+def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=False, verbose=True, unwanted_atoms=None, n_processes=cpu_count() - 1, chunksize=100):
     
     if save_folder is None:
         save_folder = cif_folder[:-1] + '_cleaned/'
@@ -255,12 +255,11 @@ def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=True, 
                 #     if not Path(subfolder).exists():
                 #         Path(subfolder).mkdir(parents=True)
                 # stop_loop, error_report, cif_metadata = clean_cif(save_folder + cif, unwanted_atoms)
-                if remove_duplicates:
-                    try:
-                        df_metadata = pd.concat([df_metadata, pd.DataFrame.from_dict(cif_metadata)], ignore_index=True)
-                    except ValueError as err:
-                        print(cif_metadata)
-                        raise err
+                try:
+                    df_metadata = pd.concat([df_metadata, pd.DataFrame.from_dict(cif_metadata)], ignore_index=True)
+                except ValueError as err:
+                    print(cif_metadata)
+                    raise err
                 for key in error_report:
                     error_summary[key] += error_report[key]
                 
