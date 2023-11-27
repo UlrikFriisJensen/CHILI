@@ -8,6 +8,8 @@ from tqdm.auto import tqdm
 import fileinput
 import warnings
 from ase.io import read
+from elements import elements
+from mendeleev import element
 from traceback_with_variables import iter_exc_lines
 from fractions import Fraction
 from multiprocessing import Pool, cpu_count
@@ -229,6 +231,40 @@ def remove_duplicate_cifs(metadata):
     
     return None
 
+def remove_atomic_identity_errors(metadata):
+    # Remove CIFs that don't contain any metal atoms
+    # This occurs because of reading errors in ASE, which is most likely due to capitalization errors in the CIFs
+    
+    # Metals of interest
+    metals = [atom.Symbol for atom in elements.Alkali_Metals] 
+    metals += [atom.Symbol for atom in elements.Alkaline_Earth_Metals] 
+    metals += [atom.Symbol for atom in elements.Transition_Metals] 
+    metals += [atom.Symbol for atom in elements.Metalloids] 
+    metals += [atom.Symbol for atom in elements.Others] # Post-transition metals
+    metals += ['La', 'Ce', 'Pr', 'Nd', 'Pm', 'Sm', 'Eu', 'Gd', 'Tb',
+            'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu'] # Lanthanides
+
+    # Remove elements that does not have a well defined radius or are rare in nanoparticles
+    unwanted_elements = ['Fr', 'Po', 'Rf', 'Db', 'Sg', 'Bh', 'Hs', 'Mt', 'Uub', 'Uun', 'Uuu']
+    for elm in unwanted_elements:
+        metals.remove(elm)
+        
+    # Convert to atomic numbers
+    metals = [element(metal).atomic_number for metal in metals]
+    
+    # Mask of cifs that include metals of interest
+    contains_metals = metadata.apply(lambda row: any(atom in metals for atom in row[2:].values), axis=1)
+    
+    # Find files that does not have any metal atoms
+    metadata_noMetals = metadata[~contains_metals]
+    
+    # Remove files that does not have any metal atoms
+    for cif in metadata_noMetals['filepath']:
+        Path(cif).unlink()
+    
+    print(f'CIFs containing no metals removed!\n{len(metadata)} CIFs --> {sum(contains_metals)} CIFs')
+    return None
+
 def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=False, verbose=True, unwanted_atoms=None, n_processes=cpu_count() - 1, chunksize=100):
     
     if save_folder is None:
@@ -270,6 +306,8 @@ def cif_cleaning_pipeline(cif_folder, save_folder=None, remove_duplicates=False,
         for key in error_summary:
             print(f'\t{key.capitalize().replace("_", " ")}: {error_summary[key]}')
         print('\n')
+    
+    remove_atomic_identity_errors(df_metadata)
     
     if remove_duplicates:
         remove_duplicate_cifs(df_metadata)
