@@ -2,6 +2,7 @@
 import os, sys, math, torch
 from mendeleev import element
 from mendeleev.fetch import fetch_table
+from elements import elements
 import numpy as np
 from tqdm.auto import tqdm
 import h5py
@@ -14,6 +15,9 @@ from networkx.algorithms.components import is_connected
 from ase.io import read
 from ase.build import make_supercell
 from ase.spacegroup import get_spacegroup
+from pymatgen.analysis.graphs import StructureGraph
+from pymatgen.analysis.local_env import CrystalNN
+from pymatgen.io.ase import AseAtomsAdaptor
 # from Code.simScatteringPatterns import simPDFs, cif_to_NP_GPU
 from debyecalculator import DebyeCalculator
 
@@ -68,7 +72,7 @@ class h5Constructor():
         return p_out == 1
 
     def gen_single_h5(self, input_tuple, override=False, verbose=False, check_connectivity=False, check_periodic=False, save_discrete_nps=True):
-        cif, np_radii, device, node_feature_table = input_tuple
+        cif, np_radii, device, node_feature_table, metals = input_tuple
         cif_name = cif.split('/')[-1].split('.')[0]
         print(cif_name, flush=True)
         # Check if graph has already been made
@@ -101,37 +105,20 @@ class h5Constructor():
         # Get distances with MIC (NOTE I don't think this makes a difference as long as pbc=True in the unit cell)
         unit_cell_dist = unit_cell.get_all_distances(mic=True)
         unit_cell_atoms = unit_cell.get_atomic_numbers().reshape(-1, 1)
-
-        # Make supercell to get Lattice constant
-        supercell = make_supercell(unit_cell, np.diag([2,2,2]))
-        metal_distances = supercell[supercell.get_atomic_numbers() != 8].get_all_distances()
-        lc = np.amin(metal_distances[metal_distances > 0.])
         
         # Create edges and node features
-        lc_mask = (unit_cell_dist > 0) & (unit_cell_dist < lc)
-        oxy_mask = np.outer(unit_cell_atoms == 8, unit_cell_atoms == 8)
-        metal_mask = np.outer(unit_cell_atoms != 8, unit_cell_atoms !=8)
-        direction = np.argwhere(lc_mask & ~oxy_mask & ~metal_mask).T
+        struc = AseAtomsAdaptor.get_structure(unit_cell)
+        crystal_nn = CrystalNN()
+        strucGraph = StructureGraph.with_local_env_strategy(struc, crystal_nn)
+        direction = np.array(strucGraph.graph.edges)[:,:2].T
         
-        # Figure out where there should be double bonds because of very small unit cells
-        if False:
-            lens_and_angles = unit_cell.get_cell_lengths_and_angles()
-            unit_cell_lens = lens_and_angles[:3]
-            unit_cell_angles = lens_and_angles[3:]
-            double_bond_mask = self.repeating_unit_mask(unit_cell_pos, unit_cell_dist, unit_cell_lens, unit_cell_angles) & ~oxy_mask & ~metal_mask & lc_mask
-            double_bond_direction = np.argwhere(double_bond_mask).T
-
-            direction = np.concatenate((direction, double_bond_direction), axis=1)
-            edge_features = np.concatenate((unit_cell_dist[lc_mask],unit_cell_dist[double_bond_mask]), axis=0)
-            node_features = np.concatenate((unit_cell_pos, unit_cell_atoms), axis=1)
-        else:
-            edge_features = unit_cell_dist[lc_mask]
-            node_features = np.array([
-                node_feature_table.loc[atom[0]].values
-                for atom in unit_cell_atoms
-                ], dtype='float')
-            node_pos_real = unit_cell.get_positions()
-            node_pos_relative = unit_cell.get_scaled_positions()
+        edge_features = unit_cell_dist[direction[0], direction[1]]
+        node_features = np.array([
+            node_feature_table.loc[atom[0]].values
+            for atom in unit_cell_atoms
+            ], dtype='float')
+        node_pos_real = unit_cell.get_positions()
+        node_pos_relative = unit_cell.get_scaled_positions()
 
         # Construct cell parameter matrix
         cell_parameters = unit_cell.cell.cellpar()
@@ -266,7 +253,24 @@ class h5Constructor():
         node_feature_table = fetch_table('elements')[['atomic_number', 'atomic_radius', 'atomic_weight', 'electron_affinity']]
         node_feature_table['electron_affinity'].fillna(0.0, inplace=True)
         
-        inputs = zip(self.cifs, repeat(np_radii), repeat(device), repeat(node_feature_table))
+        # Metals of interest
+        metals = [atom.Symbol for atom in elements.Alkali_Metals] 
+        metals += [atom.Symbol for atom in elements.Alkaline_Earth_Metals] 
+        metals += [atom.Symbol for atom in elements.Transition_Metals] 
+        metals += [atom.Symbol for atom in elements.Metalloids] 
+        metals += [atom.Symbol for atom in elements.Others] # Post-transition metals
+        metals += ['La', 'Ce', 'Pr', 'Nd', 'Pm', 'Sm', 'Eu', 'Gd', 'Tb',
+                'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu'] # Lanthanides
+
+        # Remove elements that does not have a well defined radius or are rare in nanoparticles
+        unwanted_elements = ['Fr', 'Po', 'Rf', 'Db', 'Sg', 'Bh', 'Hs', 'Mt', 'Uub', 'Uun', 'Uuu']
+        for elm in unwanted_elements:
+            metals.remove(elm)
+    
+        # Convert to atomic numbers
+        metals = [element(metal).atomic_number for metal in metals]
+        
+        inputs = zip(self.cifs, repeat(np_radii), repeat(device), repeat(node_feature_table), repeat(metals))
         #print('\nConstructing graphs from cif files:')
 
         if parallelize:
