@@ -106,17 +106,28 @@ class h5Constructor():
         unit_cell_dist = unit_cell.get_all_distances(mic=True)
         unit_cell_atoms = unit_cell.get_atomic_numbers().reshape(-1, 1)
         
-        # Create edges and node features
-        struc = AseAtomsAdaptor.get_structure(unit_cell)
-        crystal_nn = CrystalNN()
-        strucGraph = StructureGraph.with_local_env_strategy(struc, crystal_nn)
-        direction = np.array(strucGraph.graph.edges)[:,:2].T
-        
-        edge_features = unit_cell_dist[direction[0], direction[1]]
+        # Find node features
         node_features = np.array([
-            node_feature_table.loc[atom[0]].values
+            node_feature_table.loc[atom[0]-1].values
             for atom in unit_cell_atoms
             ], dtype='float')
+        
+        # Create mask of threshold for bonds
+        bond_threshold = np.zeros_like(unit_cell_dist)
+        for i, r1 in enumerate(node_features[:,1]):
+            bond_threshold[i,:] = (r1 + node_features[:,1]) / 100 * 1.25
+        np.fill_diagonal(bond_threshold, 0.)
+        
+        # Find edges
+        direction = np.argwhere(unit_cell_dist < bond_threshold).T
+        
+        # Handle case with no edges
+        if len(direction[0]) == 0:
+            min_dist = np.amin(unit_cell_dist[unit_cell_dist > 0])
+            direction = np.argwhere(unit_cell_dist < min_dist * 1.1).T
+        
+        edge_features = unit_cell_dist[direction[0], direction[1]]
+        
         node_pos_real = unit_cell.get_positions()
         node_pos_relative = unit_cell.get_scaled_positions()
 
@@ -142,7 +153,7 @@ class h5Constructor():
         neutron_calculator = DebyeCalculator(device=device, qmin=1, qmax=30, qstep=0.1, biso=0.3, rmin=0.0, rmax=55.0, rstep=0.01, radiation_type='neutron')
         
         # Construct discrete particles for simulation of spectra
-        struc_list, size_list = xray_calculator.generate_nanoparticles(structure_path=cif, radii=np_radii, sort_atoms=False, disable_pbar=True)
+        struc_list, size_list = xray_calculator.generate_nanoparticles(structure_path=cif, radii=np_radii, sort_atoms=False, disable_pbar=True, metals=metals)
         
         # Calculate scattering for large Q-range
         x_r, x_q, x_iq, _, _, x_gr = xray_calculator._get_all(struc_list)
@@ -186,21 +197,28 @@ class h5Constructor():
                     np_dists = discrete_np.get_all_distances(mic=False)
                     np_atoms = discrete_np.get_atomic_numbers().reshape(-1, 1)
 
-                    # Find lattice constant
-                    metal_distances = discrete_np[discrete_np.get_atomic_numbers() != 8].get_all_distances()
-                    lc = np.amin(metal_distances[metal_distances > 0.])
-
-                    # Create edges and node features
-                    lc_mask = (np_dists > 0) & (np_dists < lc)
-                    oxy_mask = np.outer(np_atoms == 8, np_atoms == 8)
-                    metal_mask = np.outer(np_atoms != 8, np_atoms !=8)
-                    direction = np.argwhere(lc_mask & ~oxy_mask & ~metal_mask).T
-
-                    edge_features = np_dists[lc_mask]
+                    # Find node features
                     node_features = np.array([
-                        node_feature_table.loc[atom[0]].values
+                        node_feature_table.loc[atom[0]-1].values
                         for atom in np_atoms
                         ], dtype='float')
+
+                    # Create mask of threshold for bonds
+                    bond_threshold = np.zeros_like(np_dists)
+                    for i, r1 in enumerate(node_features[:,1]):
+                        bond_threshold[i,:] = (r1 + node_features[:,1]) * 1.25
+                    np.fill_diagonal(bond_threshold, 0.)
+
+                    # Find edges
+                    direction = np.argwhere(np_dists < bond_threshold).T
+                    
+                    # Handle case with no edges
+                    if len(direction[0]) == 0:
+                        min_dist = np.amin(np_dists[np_dists > 0])
+                        direction = np.argwhere(np_dists < min_dist * 1.1).T
+
+                    edge_features = np_dists[direction[0], direction[1]]
+                    
                     node_pos_real = discrete_np.get_positions()
                     node_pos_relative = discrete_np.get_scaled_positions()
 
@@ -252,6 +270,7 @@ class h5Constructor():
         # Fetch node features and replace NaNs with 0.0
         node_feature_table = fetch_table('elements')[['atomic_number', 'atomic_radius', 'atomic_weight', 'electron_affinity']]
         node_feature_table['electron_affinity'].fillna(0.0, inplace=True)
+        node_feature_table['atomic_radius'] = node_feature_table['atomic_radius'] / 100 # Convert pm to Å
         
         # Metals of interest
         metals = [atom.Symbol for atom in elements.Alkali_Metals] 
