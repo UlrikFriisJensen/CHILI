@@ -115,7 +115,7 @@ class h5Constructor():
         # Create mask of threshold for bonds
         bond_threshold = np.zeros_like(unit_cell_dist)
         for i, r1 in enumerate(node_features[:,1]):
-            bond_threshold[i,:] = (r1 + node_features[:,1]) / 100 * 1.25
+            bond_threshold[i,:] = (r1 + node_features[:,1]) * 1.25
         np.fill_diagonal(bond_threshold, 0.)
         
         # Find edges
@@ -227,7 +227,8 @@ class h5Constructor():
                     x = torch.tensor(node_features, dtype=torch.float32)
                     edge_index = torch.tensor(direction, dtype=torch.long)
                     edge_attr = torch.tensor(edge_features, dtype=torch.float32)
-
+                    
+                    # Save discrete NP graph
                     npgraph_size_h5.create_dataset('NodeFeatures', data=node_features)
                     npgraph_size_h5.create_dataset('EdgeFeatures', data=edge_features)
                     npgraph_size_h5.create_dataset('EdgeDirections', data=direction)
@@ -240,7 +241,6 @@ class h5Constructor():
             for i, np_size in enumerate(size_list):
                 # Differentiate scattering data by NP size
                 scattering_size_h5 = scattering_h5.require_group(f'{np_size:.2f}Å')
-                scattering_size_h5.create_dataset('NP size (Å)', data=np_size)
                 
                 # XRD
                 scattering_size_h5.create_dataset('XRD', data=np.vstack((x_q, x_iq[i])))

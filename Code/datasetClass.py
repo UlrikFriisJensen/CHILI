@@ -85,7 +85,7 @@ class InOrgMatDatasets(Dataset):
                         space_group_number = space_group_number,
                         atomic_species = atomic_species,
                         n_atomic_species = len(atomic_species),
-                        np_size = h5f['ScatteringData'][key]['NP size (Å)'][()],
+                        np_size = h5f['DiscreteParticleGraphs'][key]['NP size (Å)'][()],
                         n_atoms = node_feat.shape[0],
                         n_bonds = edge_index.shape[1],
                         # Save unit cell graph attributes
