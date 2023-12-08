@@ -153,7 +153,7 @@ class h5Constructor():
         neutron_calculator = DebyeCalculator(device=device, qmin=1, qmax=30, qstep=0.1, biso=0.3, rmin=0.0, rmax=55.0, rstep=0.01, radiation_type='neutron')
         
         # Construct discrete particles for simulation of spectra
-        struc_list, size_list = xray_calculator.generate_nanoparticles(structure_path=cif, radii=np_radii, sort_atoms=False, disable_pbar=True, metals=metals)
+        struc_list, size_list, edge_list, dist_list = xray_calculator.generate_nanoparticles(structure_path=cif, radii=np_radii, atomic_size_table=node_feature_table, sort_atoms=False, disable_pbar=True, metals=metals, return_graph_elements=True)
         
         # Calculate scattering for large Q-range
         x_r, x_q, x_iq, _, _, x_gr = xray_calculator._get_all(struc_list)
@@ -194,7 +194,7 @@ class h5Constructor():
                     npgraph_size_h5 = npgraphs_h5.require_group(f'{size_list[i]:.2f}Å')
                     npgraph_size_h5.create_dataset('NP size (Å)', data=size_list[i])
 
-                    np_dists = discrete_np.get_all_distances(mic=False)
+                    # Find atomic numbers
                     np_atoms = discrete_np.get_atomic_numbers().reshape(-1, 1)
 
                     # Find node features
@@ -203,30 +203,19 @@ class h5Constructor():
                         for atom in np_atoms
                         ], dtype='float')
 
-                    # Create mask of threshold for bonds
-                    bond_threshold = np.zeros_like(np_dists)
-                    for i, r1 in enumerate(node_features[:,1]):
-                        bond_threshold[i,:] = (r1 + node_features[:,1]) * 1.25
-                    np.fill_diagonal(bond_threshold, 0.)
-
-                    # Find edges
-                    direction = np.argwhere(np_dists < bond_threshold).T
+                    # Get the created edges and distances
+                    direction = edge_list[i]
+                    edge_features = dist_list[i]
                     
-                    # Handle case with no edges
-                    if len(direction[0]) == 0:
-                        min_dist = np.amin(np_dists[np_dists > 0])
-                        direction = np.argwhere(np_dists < min_dist * 1.1).T
-
-                    edge_features = np_dists[direction[0], direction[1]]
-                    
+                    # Get positions
                     node_pos_real = discrete_np.get_positions()
                     node_pos_relative = discrete_np.get_scaled_positions()
 
                     # Convert to torch tensors
                     node_features[node_features == None] = 0.0
                     x = torch.tensor(node_features, dtype=torch.float32)
-                    edge_index = torch.tensor(direction, dtype=torch.long)
-                    edge_attr = torch.tensor(edge_features, dtype=torch.float32)
+                    edge_index = direction.to(torch.long)
+                    edge_attr = edge_features.to(torch.float32)
                     
                     # Save discrete NP graph
                     npgraph_size_h5.create_dataset('NodeFeatures', data=node_features)
