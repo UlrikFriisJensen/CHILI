@@ -2,6 +2,7 @@
 import os, sys, math, torch
 from mendeleev import element
 from mendeleev.fetch import fetch_table
+from elements import elements
 import numpy as np
 from tqdm.auto import tqdm
 import h5py
@@ -14,6 +15,9 @@ from networkx.algorithms.components import is_connected
 from ase.io import read
 from ase.build import make_supercell
 from ase.spacegroup import get_spacegroup
+from pymatgen.analysis.graphs import StructureGraph
+from pymatgen.analysis.local_env import CrystalNN
+from pymatgen.io.ase import AseAtomsAdaptor
 # from Code.simScatteringPatterns import simPDFs, cif_to_NP_GPU
 from debyecalculator import DebyeCalculator
 
@@ -68,7 +72,7 @@ class h5Constructor():
         return p_out == 1
 
     def gen_single_h5(self, input_tuple, override=False, verbose=False, check_connectivity=False, check_periodic=False, save_discrete_nps=True):
-        cif, np_radii, device, node_feature_table = input_tuple
+        cif, np_radii, device, node_feature_table, metals = input_tuple
         cif_name = cif.split('/')[-1].split('.')[0]
         print(cif_name, flush=True)
         # Check if graph has already been made
@@ -101,37 +105,31 @@ class h5Constructor():
         # Get distances with MIC (NOTE I don't think this makes a difference as long as pbc=True in the unit cell)
         unit_cell_dist = unit_cell.get_all_distances(mic=True)
         unit_cell_atoms = unit_cell.get_atomic_numbers().reshape(-1, 1)
-
-        # Make supercell to get Lattice constant
-        supercell = make_supercell(unit_cell, np.diag([2,2,2]))
-        metal_distances = supercell[supercell.get_atomic_numbers() != 8].get_all_distances()
-        lc = np.amin(metal_distances[metal_distances > 0.])
         
-        # Create edges and node features
-        lc_mask = (unit_cell_dist > 0) & (unit_cell_dist < lc)
-        oxy_mask = np.outer(unit_cell_atoms == 8, unit_cell_atoms == 8)
-        metal_mask = np.outer(unit_cell_atoms != 8, unit_cell_atoms !=8)
-        direction = np.argwhere(lc_mask & ~oxy_mask & ~metal_mask).T
+        # Find node features
+        node_features = np.array([
+            node_feature_table.loc[atom[0]-1].values
+            for atom in unit_cell_atoms
+            ], dtype='float')
         
-        # Figure out where there should be double bonds because of very small unit cells
-        if False:
-            lens_and_angles = unit_cell.get_cell_lengths_and_angles()
-            unit_cell_lens = lens_and_angles[:3]
-            unit_cell_angles = lens_and_angles[3:]
-            double_bond_mask = self.repeating_unit_mask(unit_cell_pos, unit_cell_dist, unit_cell_lens, unit_cell_angles) & ~oxy_mask & ~metal_mask & lc_mask
-            double_bond_direction = np.argwhere(double_bond_mask).T
-
-            direction = np.concatenate((direction, double_bond_direction), axis=1)
-            edge_features = np.concatenate((unit_cell_dist[lc_mask],unit_cell_dist[double_bond_mask]), axis=0)
-            node_features = np.concatenate((unit_cell_pos, unit_cell_atoms), axis=1)
-        else:
-            edge_features = unit_cell_dist[lc_mask]
-            node_features = np.array([
-                node_feature_table.loc[atom[0]].values
-                for atom in unit_cell_atoms
-                ], dtype='float')
-            node_pos_real = unit_cell.get_positions()
-            node_pos_relative = unit_cell.get_scaled_positions()
+        # Create mask of threshold for bonds
+        bond_threshold = np.zeros_like(unit_cell_dist)
+        for i, r1 in enumerate(node_features[:,1]):
+            bond_threshold[i,:] = (r1 + node_features[:,1]) * 1.25
+        np.fill_diagonal(bond_threshold, 0.)
+        
+        # Find edges
+        direction = np.argwhere(unit_cell_dist < bond_threshold).T
+        
+        # Handle case with no edges
+        if len(direction[0]) == 0:
+            min_dist = np.amin(unit_cell_dist[unit_cell_dist > 0])
+            direction = np.argwhere(unit_cell_dist < min_dist * 1.1).T
+        
+        edge_features = unit_cell_dist[direction[0], direction[1]]
+        
+        node_pos_real = unit_cell.get_positions()
+        node_pos_relative = unit_cell.get_scaled_positions()
 
         # Construct cell parameter matrix
         cell_parameters = unit_cell.cell.cellpar()
@@ -155,7 +153,7 @@ class h5Constructor():
         neutron_calculator = DebyeCalculator(device=device, qmin=1, qmax=30, qstep=0.1, biso=0.3, rmin=0.0, rmax=55.0, rstep=0.01, radiation_type='neutron')
         
         # Construct discrete particles for simulation of spectra
-        struc_list, size_list = xray_calculator.generate_nanoparticles(structure_path=cif, radii=np_radii, sort_atoms=False, disable_pbar=True)
+        struc_list, size_list, edge_list, dist_list = xray_calculator.generate_nanoparticles(structure_path=cif, radii=np_radii, atomic_size_table=node_feature_table, sort_atoms=False, disable_pbar=True, metals=metals, return_graph_elements=True)
         
         # Calculate scattering for large Q-range
         x_r, x_q, x_iq, _, _, x_gr = xray_calculator._get_all(struc_list)
@@ -196,33 +194,30 @@ class h5Constructor():
                     npgraph_size_h5 = npgraphs_h5.require_group(f'{size_list[i]:.2f}Å')
                     npgraph_size_h5.create_dataset('NP size (Å)', data=size_list[i])
 
-                    np_dists = discrete_np.get_all_distances(mic=False)
+                    # Find atomic numbers
                     np_atoms = discrete_np.get_atomic_numbers().reshape(-1, 1)
 
-                    # Find lattice constant
-                    metal_distances = discrete_np[discrete_np.get_atomic_numbers() != 8].get_all_distances()
-                    lc = np.amin(metal_distances[metal_distances > 0.])
-
-                    # Create edges and node features
-                    lc_mask = (np_dists > 0) & (np_dists < lc)
-                    oxy_mask = np.outer(np_atoms == 8, np_atoms == 8)
-                    metal_mask = np.outer(np_atoms != 8, np_atoms !=8)
-                    direction = np.argwhere(lc_mask & ~oxy_mask & ~metal_mask).T
-
-                    edge_features = np_dists[lc_mask]
+                    # Find node features
                     node_features = np.array([
-                        node_feature_table.loc[atom[0]].values
+                        node_feature_table.loc[atom[0]-1].values
                         for atom in np_atoms
                         ], dtype='float')
+
+                    # Get the created edges and distances
+                    direction = edge_list[i]
+                    edge_features = dist_list[i]
+                    
+                    # Get positions
                     node_pos_real = discrete_np.get_positions()
                     node_pos_relative = discrete_np.get_scaled_positions()
 
                     # Convert to torch tensors
                     node_features[node_features == None] = 0.0
                     x = torch.tensor(node_features, dtype=torch.float32)
-                    edge_index = torch.tensor(direction, dtype=torch.long)
-                    edge_attr = torch.tensor(edge_features, dtype=torch.float32)
-
+                    edge_index = direction.to(torch.long)
+                    edge_attr = edge_features.to(torch.float32)
+                    
+                    # Save discrete NP graph
                     npgraph_size_h5.create_dataset('NodeFeatures', data=node_features)
                     npgraph_size_h5.create_dataset('EdgeFeatures', data=edge_features)
                     npgraph_size_h5.create_dataset('EdgeDirections', data=direction)
@@ -235,7 +230,6 @@ class h5Constructor():
             for i, np_size in enumerate(size_list):
                 # Differentiate scattering data by NP size
                 scattering_size_h5 = scattering_h5.require_group(f'{np_size:.2f}Å')
-                scattering_size_h5.create_dataset('NP size (Å)', data=np_size)
                 
                 # XRD
                 scattering_size_h5.create_dataset('XRD', data=np.vstack((x_q, x_iq[i])))
@@ -265,8 +259,26 @@ class h5Constructor():
         # Fetch node features and replace NaNs with 0.0
         node_feature_table = fetch_table('elements')[['atomic_number', 'atomic_radius', 'atomic_weight', 'electron_affinity']]
         node_feature_table['electron_affinity'].fillna(0.0, inplace=True)
+        node_feature_table['atomic_radius'] = node_feature_table['atomic_radius'] / 100 # Convert pm to Å
         
-        inputs = zip(self.cifs, repeat(np_radii), repeat(device), repeat(node_feature_table))
+        # Metals of interest
+        metals = [atom.Symbol for atom in elements.Alkali_Metals] 
+        metals += [atom.Symbol for atom in elements.Alkaline_Earth_Metals] 
+        metals += [atom.Symbol for atom in elements.Transition_Metals] 
+        metals += [atom.Symbol for atom in elements.Metalloids] 
+        metals += [atom.Symbol for atom in elements.Others] # Post-transition metals
+        metals += ['La', 'Ce', 'Pr', 'Nd', 'Pm', 'Sm', 'Eu', 'Gd', 'Tb',
+                'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu'] # Lanthanides
+
+        # Remove elements that does not have a well defined radius or are rare in nanoparticles
+        unwanted_elements = ['Fr', 'Po', 'Rf', 'Db', 'Sg', 'Bh', 'Hs', 'Mt', 'Uub', 'Uun', 'Uuu']
+        for elm in unwanted_elements:
+            metals.remove(elm)
+    
+        # Convert to atomic numbers
+        metals = [element(metal).atomic_number for metal in metals]
+        
+        inputs = zip(self.cifs, repeat(np_radii), repeat(device), repeat(node_feature_table), repeat(metals))
         #print('\nConstructing graphs from cif files:')
 
         if parallelize:
