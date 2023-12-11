@@ -43,6 +43,10 @@ class InOrgMatDatasets(Dataset):
 
     def update_file_names(self, folder_path, file_extension='*'):
         file_names = [str(filepath.relative_to(folder_path)) for filepath in Path(folder_path).glob(f'*.{file_extension}') if 'pre' not in str(filepath)]
+        if len(file_names) == 0:
+            for subfolder in Path(folder_path).iterdir():
+                if subfolder.is_dir():
+                    file_names += [str(filepath.relative_to(folder_path)) for filepath in Path(subfolder).glob(f'*.{file_extension}') if 'pre' not in str(filepath)]
         return file_names
     
     def download(self):
