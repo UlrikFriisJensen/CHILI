@@ -43,7 +43,7 @@ class InOrgMatDatasets(Dataset):
 
     def update_file_names(self, folder_path, file_extension='*'):
         file_names = [str(filepath.relative_to(folder_path)) for filepath in Path(folder_path).glob(f'*.{file_extension}') if 'pre' not in str(filepath)]
-        if len(file_names) == 0:
+        if len(file_names) == 0 and Path(folder_path).exists():
             for subfolder in Path(folder_path).iterdir():
                 if subfolder.is_dir():
                     file_names += [str(filepath.relative_to(folder_path)) for filepath in Path(subfolder).glob(f'*.{file_extension}') if 'pre' not in str(filepath)]
@@ -152,7 +152,7 @@ class InOrgMatDatasets(Dataset):
             raise ValueError('Split not recognized. Please use either "train", "validation" or "test"')
         return data
     
-    def create_data_split(self, test_size=0.2, validation_size=None, split_strategy='random', stratify_on='Space group (Number)', random_state=42, return_idx=False):
+    def create_data_split(self, test_size=0.1, validation_size=None, split_strategy='random', stratify_on='Space group (Number)', random_state=42, return_idx=False):
         '''
         Split the dataset into train, validation and test sets. The indices of the split are saved to csv files in the processed directory.
         '''
