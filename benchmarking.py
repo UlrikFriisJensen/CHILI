@@ -1,9 +1,9 @@
-import graphgym
-from graphgym.config import cfg
-from graphgym.register import register_data_args, register_model_args, register_trainer_args
-from graphgym.loader import DataLoader
-from graphgym.model_builder import create_model
-from graphgym.utils import set_seed
+import torch_geometric.graphgym as graphgym
+from torch_geometric.graphgym.config import cfg
+from torch_geometric.graphgym.register import register_data_args, register_model_args, register_trainer_args
+from torch_geometric.graphgym.loader import DataLoader
+from torch_geometric.graphgym.model_builder import create_model
+from torch_geometric.graphgym.utils import set_seed
 
 def main():
     # Set the random seed
