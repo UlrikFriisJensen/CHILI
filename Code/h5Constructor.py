@@ -138,7 +138,7 @@ class h5Constructor():
         node_features[node_features == None] = 0.0
         x = torch.tensor(node_features, dtype=torch.float32)
         edge_index = torch.tensor(direction, dtype=torch.long)
-        edge_attr = torch.tensor(edge_features, dtype=torch.float32)
+        edge_attr = torch.tensor(edge_features, dtype=torch.float32) # TODO:Size of edge_attr does not match with the edge_index
 
         if check_connectivity:
             graph = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
