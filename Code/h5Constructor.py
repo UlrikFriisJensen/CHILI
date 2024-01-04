@@ -205,7 +205,7 @@ class h5Constructor():
 
                     # Get the created edges and distances
                     direction = edge_list[i]
-                    edge_features = dist_list[i]
+                    edge_features = dist_list[direction[0], direction[1]]
                     
                     # Get positions
                     node_pos_real = discrete_np.get_positions()
