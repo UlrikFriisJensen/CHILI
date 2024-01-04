@@ -60,7 +60,7 @@ print('\n')
 writer = SummaryWriter(f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['model']}_{config_dict['task']}")
 
 # Training loop
-for epoch in range(config_dict['Train_config']['epochs'], desc='Epochs'):
+for epoch in range(config_dict['Train_config']['epochs']):
     model.train()
     total_loss = 0
 
