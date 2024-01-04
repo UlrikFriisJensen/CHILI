@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 from Code.datasetClass import InOrgMatDatasets
-from torch_geometric.nn.models import GCN
+from torch_geometric.nn.models import GCN, GraphSAGE, GIN, GAT, EdgeCNN, DimeNetPlusPlus, SchNet
 from torch.utils.tensorboard import SummaryWriter
 import yaml
 
@@ -34,7 +34,22 @@ except FileNotFoundError:
     dataset.load_data_split(split_strategy='random')
 
 # Define your model
-model = GCN(**config_dict['Model_config']).to(device)
+if config_dict['model'] == 'GCN':
+    model = GCN(**config_dict['Model_config']).to(device)
+elif config_dict['model'] == 'GraphSAGE':
+    model = GraphSAGE(**config_dict['Model_config']).to(device)
+elif config_dict['model'] == 'GIN':
+    model = GIN(**config_dict['Model_config']).to(device)
+elif config_dict['model'] == 'GAT':
+    model = GAT(**config_dict['Model_config']).to(device)
+elif config_dict['model'] == 'EdgeCNN':
+    model = EdgeCNN(**config_dict['Model_config']).to(device)
+elif config_dict['model'] == 'DimeNetPlusPlus':
+    model = DimeNetPlusPlus(**config_dict['Model_config']).to(device)
+elif config_dict['model'] == 'SchNet':
+    model = SchNet(**config_dict['Model_config']).to(device)
+else:
+    raise ValueError('Model not supported')
 
 # Define dataloader
 train_loader = DataLoader(dataset.train_set, batch_size=config_dict['Train_config']['batch_size'], shuffle=True)
@@ -43,7 +58,10 @@ test_loader = DataLoader(dataset.test_set, batch_size=config_dict['Train_config'
 
 # Define optimizer and loss function
 optimizer = torch.optim.Adam(model.parameters(), lr=config_dict['Train_config']['learning_rate'])
-criterion = torch.nn.CrossEntropyLoss()
+if config_dict['task'] in ['NodeClassification', 'EdgeClassification', 'GraphClassification']:
+    criterion = torch.nn.CrossEntropyLoss()
+if config_dict['task'] in ['GraphRegression', 'NodeRegression', 'EdgeRegression']:
+    criterion = torch.nn.MSELoss()
 
 print(f'\nModel: {config_dict["model"]}\nDataset: {config_dict["dataset"]}\nTask: {config_dict["task"]}')
 print('\n')
@@ -67,8 +85,23 @@ for epoch in range(config_dict['Train_config']['epochs']):
     for data in train_loader:
         data = data.to(device)
         optimizer.zero_grad()
-        out = model.forward(data.pos_frac, data.edge_index) # TODO: Fix bug with size of edge_attr
-        loss = criterion(out, data.x[:,0].long())
+        if config_dict['task'] == 'NodeClassification':
+            out = model.forward(data.pos_frac, data.edge_index)
+            loss = criterion(out, data.x[:,0].long())
+        elif config_dict['task'] == 'EdgeClassification':
+            pass
+        elif config_dict['task'] == 'GraphClassification':
+            pass
+        elif config_dict['task'] == 'LinkPrediction':
+            pass
+        elif config_dict['task'] == 'GraphRegression':
+            pass
+        elif config_dict['task'] == 'NodeRegression':
+            pass
+        elif config_dict['task'] == 'EdgeRegression':
+            pass
+        elif config_dict['task'] == 'GraphReconstruction':
+            pass
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
@@ -83,8 +116,23 @@ for epoch in range(config_dict['Train_config']['epochs']):
     with torch.no_grad():
         for data in val_loader:
             data = data.to(device)
-            out = model.forward(data.pos_frac, data.edge_index) # TODO: Fix bug with size of edge_attr
-            _, predicted = torch.max(out.data, 1)
+            if config_dict['task'] == 'NodeClassification':
+                out = model.forward(data.pos_frac, data.edge_index)
+                _, predicted = torch.max(out.data, 1)
+            elif config_dict['task'] == 'EdgeClassification':
+                pass
+            elif config_dict['task'] == 'GraphClassification':
+                pass
+            elif config_dict['task'] == 'LinkPrediction':
+                pass
+            elif config_dict['task'] == 'GraphRegression':
+                pass
+            elif config_dict['task'] == 'NodeRegression':
+                pass
+            elif config_dict['task'] == 'EdgeRegression':
+                pass
+            elif config_dict['task'] == 'GraphReconstruction':
+                pass
             total += data.x[:,0].size(0)
             correct += (predicted == data.x[:,0].long()).sum().item()
 
@@ -104,8 +152,23 @@ total = 0
 with torch.no_grad():
     for data in test_loader:
         data = data.to(device)
-        out = model.forward(data.pos_frac, data.edge_index) # TODO: Fix bug with size of edge_attr
-        _, predicted = torch.max(out.data, 1)
+        if config_dict['task'] == 'NodeClassification':
+            out = model.forward(data.pos_frac, data.edge_index)
+            _, predicted = torch.max(out.data, 1)
+        elif config_dict['task'] == 'EdgeClassification':
+            pass
+        elif config_dict['task'] == 'GraphClassification':
+            pass
+        elif config_dict['task'] == 'LinkPrediction':
+            pass
+        elif config_dict['task'] == 'GraphRegression':
+            pass
+        elif config_dict['task'] == 'NodeRegression':
+            pass
+        elif config_dict['task'] == 'EdgeRegression':
+            pass
+        elif config_dict['task'] == 'GraphReconstruction':
+            pass
         total += data.x[:,0].size(0)
         correct += (predicted == data.x[:,0].long()).sum().item()
 
