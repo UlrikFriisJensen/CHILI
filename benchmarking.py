@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 from Code.datasetClass import InOrgMatDatasets
-from torch_geometric.nn.models import GCN, GraphSAGE, GIN, GAT, EdgeCNN, DimeNetPlusPlus, SchNet
+from torch_geometric.nn.models import GCN, GraphSAGE, GIN, GAT, EdgeCNN, DimeNetPlusPlus, SchNet, AttentiveFP
 from torch.utils.tensorboard import SummaryWriter
 import yaml
 
@@ -36,18 +36,36 @@ except FileNotFoundError:
 # Define your model
 if config_dict['model'] == 'GCN':
     model = GCN(**config_dict['Model_config']).to(device)
+    def forward_pass(data):
+        return model.forward(data.pos_abs, data.edge_index) # TODO: Fix data.edge_attr gives errors
 elif config_dict['model'] == 'GraphSAGE':
     model = GraphSAGE(**config_dict['Model_config']).to(device)
+    def forward_pass(data):
+        return model.forward(data.pos_abs, data.edge_index) # TODO: Fix data.edge_attr gives errors
 elif config_dict['model'] == 'GIN':
     model = GIN(**config_dict['Model_config']).to(device)
+    def forward_pass(data):
+        return model.forward(data.pos_abs, data.edge_index) # TODO: Fix data.edge_attr gives errors
 elif config_dict['model'] == 'GAT':
     model = GAT(**config_dict['Model_config']).to(device)
+    def forward_pass(data):
+        return model.forward(data.pos_abs, data.edge_index) # TODO: Fix data.edge_attr gives errors
 elif config_dict['model'] == 'EdgeCNN':
     model = EdgeCNN(**config_dict['Model_config']).to(device)
+    def forward_pass(data):
+        return model.forward(data.pos_abs, data.edge_index) # TODO: Fix data.edge_attr gives errors
 elif config_dict['model'] == 'DimeNetPlusPlus':
     model = DimeNetPlusPlus(**config_dict['Model_config']).to(device)
+    def forward_pass(data):
+        return model.forward(data.x[:,0], data.pos_abs)
 elif config_dict['model'] == 'SchNet':
     model = SchNet(**config_dict['Model_config']).to(device)
+    def forward_pass(data):
+        return model.forward(data.x[:,0], data.pos_abs)
+elif config_dict['model'] == 'AttentiveFP':
+    model = AttentiveFP(**config_dict['Model_config']).to(device)
+    def forward_pass(data):
+        return model.forward(data.pos_abs, data.edge_index) # TODO: Fix data.edge_attr gives errors
 else:
     raise ValueError('Model not supported')
 
@@ -86,12 +104,13 @@ for epoch in range(config_dict['Train_config']['epochs']):
         data = data.to(device)
         optimizer.zero_grad()
         if config_dict['task'] == 'NodeClassification':
-            out = model.forward(data.pos_frac, data.edge_index)
+            out = forward_pass(data)
             loss = criterion(out, data.x[:,0].long())
         elif config_dict['task'] == 'EdgeClassification':
             pass
         elif config_dict['task'] == 'GraphClassification':
-            pass
+            out = model.forward(data.pos_frac, data.edge_index, batch=data.batch)
+            loss = criterion(out, torch.tensor(data.y['space_group_number']))
         elif config_dict['task'] == 'LinkPrediction':
             pass
         elif config_dict['task'] == 'GraphRegression':
@@ -117,12 +136,17 @@ for epoch in range(config_dict['Train_config']['epochs']):
         for data in val_loader:
             data = data.to(device)
             if config_dict['task'] == 'NodeClassification':
-                out = model.forward(data.pos_frac, data.edge_index)
+                out = forward_pass(data)
                 _, predicted = torch.max(out.data, 1)
+                total += data.x[:,0].size(0)
+                correct += (predicted == data.x[:,0].long()).sum().item()
             elif config_dict['task'] == 'EdgeClassification':
                 pass
             elif config_dict['task'] == 'GraphClassification':
-                pass
+                out = model.forward(data.pos_frac, data.edge_index, batch=data.batch)
+                _, predicted = torch.max(out.data, 1)
+                total += data.y['space_group_number'].size(0)
+                correct += (predicted == torch.tensor(data.y['space_group_number'])).sum().item()
             elif config_dict['task'] == 'LinkPrediction':
                 pass
             elif config_dict['task'] == 'GraphRegression':
@@ -132,9 +156,7 @@ for epoch in range(config_dict['Train_config']['epochs']):
             elif config_dict['task'] == 'EdgeRegression':
                 pass
             elif config_dict['task'] == 'GraphReconstruction':
-                pass
-            total += data.x[:,0].size(0)
-            correct += (predicted == data.x[:,0].long()).sum().item()
+                pass      
 
     val_accuracy = correct / total
 
@@ -153,12 +175,17 @@ with torch.no_grad():
     for data in test_loader:
         data = data.to(device)
         if config_dict['task'] == 'NodeClassification':
-            out = model.forward(data.pos_frac, data.edge_index)
+            out = forward_pass(data)
             _, predicted = torch.max(out.data, 1)
+            total += data.x[:,0].size(0)
+            correct += (predicted == data.x[:,0].long()).sum().item()
         elif config_dict['task'] == 'EdgeClassification':
             pass
         elif config_dict['task'] == 'GraphClassification':
-            pass
+            out = model.forward(data.pos_frac, data.edge_index, batch=data.batch)
+            _, predicted = torch.max(out.data, 1)
+            total += data.y['space_group_number'].size(0)
+            correct += (predicted == torch.tensor(data.y['space_group_number'])).sum().item()
         elif config_dict['task'] == 'LinkPrediction':
             pass
         elif config_dict['task'] == 'GraphRegression':
@@ -169,8 +196,6 @@ with torch.no_grad():
             pass
         elif config_dict['task'] == 'GraphReconstruction':
             pass
-        total += data.x[:,0].size(0)
-        correct += (predicted == data.x[:,0].long()).sum().item()
 
 test_accuracy = correct / total
 
