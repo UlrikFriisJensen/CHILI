@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 from Code.datasetClass import InOrgMatDatasets
 from torch_geometric.nn.models import GCN, GraphSAGE, GIN, GAT, EdgeCNN, DimeNetPlusPlus, SchNet, AttentiveFP
+from torch_geometric.nn import global_mean_pool, Linear
 from torch.utils.tensorboard import SummaryWriter
 import yaml
 
@@ -36,38 +37,45 @@ except FileNotFoundError:
 # Define your model
 if config_dict['model'] == 'GCN':
     model = GCN(**config_dict['Model_config']).to(device)
-    def forward_pass(data):
-        return model.forward(data.pos_abs, data.edge_index) # TODO: Fix data.edge_attr gives errors
 elif config_dict['model'] == 'GraphSAGE':
     model = GraphSAGE(**config_dict['Model_config']).to(device)
-    def forward_pass(data):
-        return model.forward(data.pos_abs, data.edge_index) # TODO: Fix data.edge_attr gives errors
 elif config_dict['model'] == 'GIN':
     model = GIN(**config_dict['Model_config']).to(device)
-    def forward_pass(data):
-        return model.forward(data.pos_abs, data.edge_index) # TODO: Fix data.edge_attr gives errors
 elif config_dict['model'] == 'GAT':
     model = GAT(**config_dict['Model_config']).to(device)
-    def forward_pass(data):
-        return model.forward(data.pos_abs, data.edge_index) # TODO: Fix data.edge_attr gives errors
 elif config_dict['model'] == 'EdgeCNN':
     model = EdgeCNN(**config_dict['Model_config']).to(device)
-    def forward_pass(data):
-        return model.forward(data.pos_abs, data.edge_index) # TODO: Fix data.edge_attr gives errors
-elif config_dict['model'] == 'DimeNetPlusPlus':
-    model = DimeNetPlusPlus(**config_dict['Model_config']).to(device)
-    def forward_pass(data):
-        return model.forward(data.x[:,0], data.pos_abs)
-elif config_dict['model'] == 'SchNet':
-    model = SchNet(**config_dict['Model_config']).to(device)
-    def forward_pass(data):
-        return model.forward(data.x[:,0], data.pos_abs)
 elif config_dict['model'] == 'AttentiveFP':
     model = AttentiveFP(**config_dict['Model_config']).to(device)
-    def forward_pass(data):
-        return model.forward(data.pos_abs, data.edge_index) # TODO: Fix data.edge_attr gives errors
+elif config_dict['model'] == 'DimeNetPlusPlus':
+    model = DimeNetPlusPlus().to(device)
+elif config_dict['model'] == 'SchNet':
+    model = SchNet().to(device)
 else:
     raise ValueError('Model not supported')
+
+# Define forward pass
+if config_dict['task'] == 'AtomClassification':
+    if config_dict['model'] in ['DimeNetPlusPlus', 'SchNet']:
+        raise NotImplementedError
+    else:
+        def forward_pass(data):
+            return model.forward(data.pos_abs, data.edge_index, data.edge_attr, data.batch)
+elif config_dict['task'] == 'SpacegroupClassification':
+    if config_dict['model'] in ['DimeNetPlusPlus', 'SchNet']:
+        def forward_pass(data):
+            return model.forward(data.x[:,0], data.pos_abs)
+    else:
+        def forward_pass(data):
+            return model.forward(torch.cat((data.x, data.pos_abs),dim=1), data.edge_index, data.edge_attr, data.batch)
+elif config_dict['task'] == 'PositionRegression':
+    if config_dict['model'] in ['DimeNetPlusPlus', 'SchNet']:
+        raise NotImplementedError
+    else:
+        def forward_pass(data):
+            return model.forward(data.x, data.edge_index, data.edge_attr, data.batch)
+else:
+    raise NotImplementedError
 
 # Define dataloader
 train_loader = DataLoader(dataset.train_set, batch_size=config_dict['Train_config']['batch_size'], shuffle=True)
@@ -76,10 +84,17 @@ test_loader = DataLoader(dataset.test_set, batch_size=config_dict['Train_config'
 
 # Define optimizer and loss function
 optimizer = torch.optim.Adam(model.parameters(), lr=config_dict['Train_config']['learning_rate'])
-if config_dict['task'] in ['NodeClassification', 'EdgeClassification', 'GraphClassification']:
+if config_dict['task'] in ['AtomClassification', 'SpacegroupClassification']:
     criterion = torch.nn.CrossEntropyLoss()
-if config_dict['task'] in ['GraphRegression', 'NodeRegression', 'EdgeRegression']:
+elif config_dict['task'] in ['PositionRegression']:
+    def position_MAE(pred_xyz, true_xyz):
+        '''
+        Calculates the mean absolute error between the predicted and true positions of the atoms in units of Ångstrøm.
+        '''
+        return torch.mean(torch.sqrt(torch.sum(F.mse_loss(pred_xyz, true_xyz, reduction='none'), dim=1)), dim=0)
     criterion = torch.nn.MSELoss()
+elif config_dict['task'] in ['SAXSRegression', 'XRDRegression', 'xPDFRegression']:
+    pass
 
 print(f'\nModel: {config_dict["model"]}\nDataset: {config_dict["dataset"]}\nTask: {config_dict["task"]}')
 print('\n')
@@ -103,21 +118,23 @@ for epoch in range(config_dict['Train_config']['epochs']):
     for data in train_loader:
         data = data.to(device)
         optimizer.zero_grad()
-        if config_dict['task'] == 'NodeClassification':
+        if config_dict['task'] == 'AtomClassification':
             out = forward_pass(data)
             loss = criterion(out, data.x[:,0].long())
-        elif config_dict['task'] == 'EdgeClassification':
+        elif config_dict['task'] == 'SpacegroupClassification':
+            out = forward_pass(data)
+            out = global_mean_pool(out, data.batch)
+            out = Linear(out.size(-1), 230).to(device)(out)
+            ground_truth = torch.tensor(data.y['space_group_number'], device=device)
+            loss = criterion(out, ground_truth)
+        elif config_dict['task'] == 'PositionRegression':
+            out = forward_pass(data)
+            loss = criterion(out, data.pos_abs)
+        elif config_dict['task'] == 'SAXSRegression':
             pass
-        elif config_dict['task'] == 'GraphClassification':
-            out = model.forward(data.pos_frac, data.edge_index, batch=data.batch)
-            loss = criterion(out, torch.tensor(data.y['space_group_number']))
-        elif config_dict['task'] == 'LinkPrediction':
+        elif config_dict['task'] == 'XRDRegression':
             pass
-        elif config_dict['task'] == 'GraphRegression':
-            pass
-        elif config_dict['task'] == 'NodeRegression':
-            pass
-        elif config_dict['task'] == 'EdgeRegression':
+        elif config_dict['task'] == 'xPDFRegression':
             pass
         elif config_dict['task'] == 'GraphReconstruction':
             pass
@@ -130,41 +147,86 @@ for epoch in range(config_dict['Train_config']['epochs']):
     # Validation loop
     model.eval()
     correct = 0
+    error = 0
     total = 0
 
     with torch.no_grad():
         for data in val_loader:
             data = data.to(device)
-            if config_dict['task'] == 'NodeClassification':
+            if config_dict['task'] == 'AtomClassification':
                 out = forward_pass(data)
                 _, predicted = torch.max(out.data, 1)
                 total += data.x[:,0].size(0)
                 correct += (predicted == data.x[:,0].long()).sum().item()
-            elif config_dict['task'] == 'EdgeClassification':
-                pass
-            elif config_dict['task'] == 'GraphClassification':
-                out = model.forward(data.pos_frac, data.edge_index, batch=data.batch)
+            elif config_dict['task'] == 'SpacegroupClassification':
+                out = forward_pass(data)
+                out = global_mean_pool(out, data.batch)
+                out = Linear(out.size(-1), 230).to(device)(out)
                 _, predicted = torch.max(out.data, 1)
-                total += data.y['space_group_number'].size(0)
-                correct += (predicted == torch.tensor(data.y['space_group_number'])).sum().item()
-            elif config_dict['task'] == 'LinkPrediction':
+                ground_truth = torch.tensor(data.y['space_group_number'], device=device)
+                total += ground_truth.size(0)
+                correct += (predicted == ground_truth).sum().item()
+            elif config_dict['task'] == 'PositionRegression':
+                out = forward_pass(data)
+                error += position_MAE(out, data.pos_abs)
+            elif config_dict['task'] == 'SAXSRegression':
                 pass
-            elif config_dict['task'] == 'GraphRegression':
+            elif config_dict['task'] == 'XRDRegression':
                 pass
-            elif config_dict['task'] == 'NodeRegression':
-                pass
-            elif config_dict['task'] == 'EdgeRegression':
+            elif config_dict['task'] == 'xPDFRegression':
                 pass
             elif config_dict['task'] == 'GraphReconstruction':
-                pass      
-
-    val_accuracy = correct / total
-
-    # Log training and validation progress
+                pass     
+    
+    # Log training progress
     writer.add_scalar('Loss/train', train_loss, epoch)
-    writer.add_scalar('Accuracy/val', val_accuracy, epoch)
-
-    print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val Accuracy: {val_accuracy:.4f}')
+    
+    # Log validation progress
+    if 'Classification' in config_dict['task']:
+        val_accuracy = correct / total
+        writer.add_scalar('Accuracy/val', val_accuracy, epoch)
+        
+        # Save model if validation accuracy is improved
+        if epoch == 0:
+            best_val_accuracy = val_accuracy
+        elif val_accuracy > best_val_accuracy:
+            torch.save({
+                'epoch': epoch+1,
+                'model_state_dict': model.state_dict(), 
+                'optimizer_state_dict': optimizer.state_dict(),
+                },
+                f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['model']}_{config_dict['task']}/best.pt"
+                )
+            best_val_accuracy = val_accuracy
+        
+        print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val Accuracy: {val_accuracy:.4f}')
+    elif 'Regression' in config_dict['task']:
+        val_error = error / len(val_loader)
+        writer.add_scalar('posMAE/val', val_error, epoch)
+        
+        # Save model if validation error is improved
+        if epoch == 0:
+            best_val_error = val_error
+        elif val_error < best_val_error:
+            torch.save({
+                'epoch': epoch+1,
+                'model_state_dict': model.state_dict(), 
+                'optimizer_state_dict': optimizer.state_dict(),
+                },
+                f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['model']}_{config_dict['task']}/best.pt"
+                )
+            best_val_error = val_error
+        
+        print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val position MAE: {val_error:.4f}')
+    
+    # Save latest model
+    torch.save({
+        'epoch': epoch+1,
+        'model_state_dict': model.state_dict(), 
+        'optimizer_state_dict': optimizer.state_dict(),
+        },
+        f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['model']}_{config_dict['task']}/latest.pt"
+        )
 
 # Evaluate the model on the test set using the best epoch
 model.eval()
@@ -174,34 +236,43 @@ total = 0
 with torch.no_grad():
     for data in test_loader:
         data = data.to(device)
-        if config_dict['task'] == 'NodeClassification':
+        if config_dict['task'] == 'AtomClassification':
             out = forward_pass(data)
             _, predicted = torch.max(out.data, 1)
             total += data.x[:,0].size(0)
             correct += (predicted == data.x[:,0].long()).sum().item()
-        elif config_dict['task'] == 'EdgeClassification':
-            pass
-        elif config_dict['task'] == 'GraphClassification':
-            out = model.forward(data.pos_frac, data.edge_index, batch=data.batch)
+        elif config_dict['task'] == 'SpacegroupClassification':
+            out = forward_pass(data)
+            out = global_mean_pool(out, data.batch)
+            out = Linear(out.size(-1), 230).to(device)(out)
             _, predicted = torch.max(out.data, 1)
-            total += data.y['space_group_number'].size(0)
-            correct += (predicted == torch.tensor(data.y['space_group_number'])).sum().item()
-        elif config_dict['task'] == 'LinkPrediction':
+            ground_truth = torch.tensor(data.y['space_group_number'], device=device)
+            total += ground_truth.size(0)
+            correct += (predicted == ground_truth).sum().item()
+        elif config_dict['task'] == 'PositionRegression':
+            out = forward_pass(data)
+            error += position_MAE(out, data.pos_abs)
+        elif config_dict['task'] == 'SAXSRegression':
             pass
-        elif config_dict['task'] == 'GraphRegression':
+        elif config_dict['task'] == 'XRDRegression':
             pass
-        elif config_dict['task'] == 'NodeRegression':
-            pass
-        elif config_dict['task'] == 'EdgeRegression':
+        elif config_dict['task'] == 'xPDFRegression':
             pass
         elif config_dict['task'] == 'GraphReconstruction':
-            pass
+            pass  
 
-test_accuracy = correct / total
+if 'Classification' in config_dict['task']:
+    test_accuracy = correct / total
 
-writer.add_scalar('Accuracy/test', test_accuracy, epoch)
+    writer.add_scalar('Accuracy/test', test_accuracy, epoch)
 
-print(f'Test Accuracy: {test_accuracy:.4f}')
+    print(f'Test Accuracy: {test_accuracy:.4f}')
+elif 'Regression' in config_dict['task']:
+    test_error = error / len(test_loader)
+
+    writer.add_scalar('posMAE/test', test_error, epoch)
+
+    print(f'Test position MAE: {test_error:.4f}')
 
 # Close TensorBoard writer
 writer.close()
