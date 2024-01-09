@@ -8,6 +8,9 @@ from torch_geometric.nn.models import GCN, GraphSAGE, GIN, GAT, EdgeCNN, DimeNet
 from torch_geometric.nn import global_mean_pool, Linear
 from torch.utils.tensorboard import SummaryWriter
 import yaml
+import warnings
+
+warnings.simplefilter(action='ignore')
 
 # Define position mean absolute error function
 def position_MAE(pred_xyz, true_xyz):
@@ -28,7 +31,7 @@ with open(config_path, 'r') as file:
     config_dict = yaml.safe_load(file)
 
 # Set device
-device = 'cpu'# torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Set seed
 torch.manual_seed(config_dict['Train_config']['seed'])

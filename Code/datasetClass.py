@@ -57,19 +57,19 @@ class InOrgMatDatasets(Dataset):
 
     def crystal_system_to_number(self, crystal_system):
         if crystal_system == 'Triclinic':
-            return 1
+            return 0
         elif crystal_system == 'Monoclinic':
-            return 2
+            return 1
         elif crystal_system == 'Orthorhombic':
-            return 3
+            return 2
         elif crystal_system == 'Tetragonal':
-            return 4
+            return 3
         elif crystal_system == 'Trigonal':
-            return 5
+            return 4
         elif crystal_system == 'Hexagonal':
-            return 6
+            return 5
         elif crystal_system == 'Cubic':
-            return 7
+            return 6
         else:
             raise ValueError('Crystal system not recognized. Please use either "Triclinic", "Monoclinic", "Orthorhombic", "Tetragonal", "Trigonal", "Hexagonal" or "Cubic"')
     
