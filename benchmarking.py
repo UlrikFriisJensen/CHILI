@@ -9,6 +9,13 @@ from torch_geometric.nn import global_mean_pool, Linear
 from torch.utils.tensorboard import SummaryWriter
 import yaml
 
+# Define position mean absolute error function
+def position_MAE(pred_xyz, true_xyz):
+    '''
+    Calculates the mean absolute error between the predicted and true positions of the atoms in units of Ångstrøm.
+    '''
+    return torch.mean(torch.sqrt(torch.sum(F.mse_loss(pred_xyz, true_xyz, reduction='none'), dim=1)), dim=0)
+
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Benchmarking script')
 parser.add_argument('--config', type=str, help='Path to configuration file')
@@ -21,7 +28,7 @@ with open(config_path, 'r') as file:
     config_dict = yaml.safe_load(file)
 
 # Set device
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = 'cpu'# torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Set seed
 torch.manual_seed(config_dict['Train_config']['seed'])
@@ -60,20 +67,20 @@ if config_dict['task'] == 'AtomClassification':
         raise NotImplementedError
     else:
         def forward_pass(data):
-            return model.forward(data.pos_abs, data.edge_index, data.edge_attr, data.batch)
-elif config_dict['task'] == 'SpacegroupClassification':
+            return model.forward(x=data.pos_abs, edge_index=data.edge_index, edge_attr=data.edge_attr, batch=data.batch)
+elif config_dict['task'] in ['SpacegroupClassification', 'CrystalSystemClassification']:
     if config_dict['model'] in ['DimeNetPlusPlus', 'SchNet']:
         def forward_pass(data):
             return model.forward(data.x[:,0], data.pos_abs)
     else:
         def forward_pass(data):
-            return model.forward(torch.cat((data.x, data.pos_abs),dim=1), data.edge_index, data.edge_attr, data.batch)
+            return model.forward(x=torch.cat((data.x, data.pos_abs),dim=1), edge_index=data.edge_index, edge_attr=data.edge_attr, batch=data.batch)
 elif config_dict['task'] == 'PositionRegression':
     if config_dict['model'] in ['DimeNetPlusPlus', 'SchNet']:
         raise NotImplementedError
     else:
         def forward_pass(data):
-            return model.forward(data.x, data.edge_index, data.edge_attr, data.batch)
+            return model.forward(x=data.x, edge_index=data.edge_index, edge_attr=data.edge_attr, batch=data.batch)
 else:
     raise NotImplementedError
 
@@ -84,14 +91,9 @@ test_loader = DataLoader(dataset.test_set, batch_size=config_dict['Train_config'
 
 # Define optimizer and loss function
 optimizer = torch.optim.Adam(model.parameters(), lr=config_dict['Train_config']['learning_rate'])
-if config_dict['task'] in ['AtomClassification', 'SpacegroupClassification']:
+if config_dict['task'] in ['AtomClassification', 'SpacegroupClassification', 'CrystalSystemClassification']:
     criterion = torch.nn.CrossEntropyLoss()
 elif config_dict['task'] in ['PositionRegression']:
-    def position_MAE(pred_xyz, true_xyz):
-        '''
-        Calculates the mean absolute error between the predicted and true positions of the atoms in units of Ångstrøm.
-        '''
-        return torch.mean(torch.sqrt(torch.sum(F.mse_loss(pred_xyz, true_xyz, reduction='none'), dim=1)), dim=0)
     criterion = torch.nn.MSELoss()
 elif config_dict['task'] in ['SAXSRegression', 'XRDRegression', 'xPDFRegression']:
     pass
@@ -120,16 +122,25 @@ for epoch in range(config_dict['Train_config']['epochs']):
         optimizer.zero_grad()
         if config_dict['task'] == 'AtomClassification':
             out = forward_pass(data)
-            loss = criterion(out, data.x[:,0].long())
+            ground_truth = data.x[:,0].long()
         elif config_dict['task'] == 'SpacegroupClassification':
             out = forward_pass(data)
             out = global_mean_pool(out, data.batch)
             out = Linear(out.size(-1), 230).to(device)(out)
             ground_truth = torch.tensor(data.y['space_group_number'], device=device)
-            loss = criterion(out, ground_truth)
+        elif config_dict['task'] == 'CrystalSystemClassification':
+            # print(data.x.size())
+            # print(data.pos_abs.size())
+            # print(data.edge_attr.size())
+            # print(data.edge_index.size())
+            # print(data.edge_index.max())
+            out = forward_pass(data)
+            out = global_mean_pool(out, data.batch)
+            out = Linear(out.size(-1), 7).to(device)(out)
+            ground_truth = torch.tensor(data.y['crystal_system_number'], device=device)
         elif config_dict['task'] == 'PositionRegression':
             out = forward_pass(data)
-            loss = criterion(out, data.pos_abs)
+            ground_truth = data.pos_abs
         elif config_dict['task'] == 'SAXSRegression':
             pass
         elif config_dict['task'] == 'XRDRegression':
@@ -138,6 +149,7 @@ for epoch in range(config_dict['Train_config']['epochs']):
             pass
         elif config_dict['task'] == 'GraphReconstruction':
             pass
+        loss = criterion(out, ground_truth)
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
@@ -164,6 +176,14 @@ for epoch in range(config_dict['Train_config']['epochs']):
                 out = Linear(out.size(-1), 230).to(device)(out)
                 _, predicted = torch.max(out.data, 1)
                 ground_truth = torch.tensor(data.y['space_group_number'], device=device)
+                total += ground_truth.size(0)
+                correct += (predicted == ground_truth).sum().item()
+            elif config_dict['task'] == 'CrystalSystemClassification':
+                out = forward_pass(data)
+                out = global_mean_pool(out, data.batch)
+                out = Linear(out.size(-1), 7).to(device)(out)
+                _, predicted = torch.max(out.data, 1)
+                ground_truth = torch.tensor(data.y['crystal_system_number'], device=device)
                 total += ground_truth.size(0)
                 correct += (predicted == ground_truth).sum().item()
             elif config_dict['task'] == 'PositionRegression':
@@ -247,6 +267,14 @@ with torch.no_grad():
             out = Linear(out.size(-1), 230).to(device)(out)
             _, predicted = torch.max(out.data, 1)
             ground_truth = torch.tensor(data.y['space_group_number'], device=device)
+            total += ground_truth.size(0)
+            correct += (predicted == ground_truth).sum().item()
+        elif config_dict['task'] == 'CrystalSystemClassification':
+            out = forward_pass(data)
+            out = global_mean_pool(out, data.batch)
+            out = Linear(out.size(-1), 7).to(device)(out)
+            _, predicted = torch.max(out.data, 1)
+            ground_truth = torch.tensor(data.y['crystal_system_number'], device=device)
             total += ground_truth.size(0)
             correct += (predicted == ground_truth).sum().item()
         elif config_dict['task'] == 'PositionRegression':
