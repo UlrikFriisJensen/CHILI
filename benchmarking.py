@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 from Code.datasetClass import InOrgMatDatasets
-from torch_geometric.nn.models import GCN, GraphSAGE, GIN, GAT, EdgeCNN, DimeNetPlusPlus, SchNet, AttentiveFP
+from torch_geometric.nn.models import GCN, GraphSAGE, GIN, GAT, EdgeCNN, GraphUNet, PMLP
 from torch_geometric.nn import global_mean_pool, Linear
 from torch.utils.tensorboard import SummaryWriter
 import yaml
@@ -55,32 +55,41 @@ elif config_dict['model'] == 'GAT':
     model = GAT(**config_dict['Model_config']).to(device)
 elif config_dict['model'] == 'EdgeCNN':
     model = EdgeCNN(**config_dict['Model_config']).to(device)
-elif config_dict['model'] == 'AttentiveFP':
-    model = AttentiveFP(**config_dict['Model_config']).to(device)
-elif config_dict['model'] == 'DimeNetPlusPlus':
-    model = DimeNetPlusPlus().to(device)
-elif config_dict['model'] == 'SchNet':
-    model = SchNet().to(device)
+elif config_dict['model'] == 'GraphUNet':
+    model = GraphUNet(**config_dict['Model_config']).to(device)
+elif config_dict['model'] == 'PMLP':
+    model = PMLP(**config_dict['Model_config']).to(device)
 else:
     raise ValueError('Model not supported')
 
 # Define forward pass
 if config_dict['task'] == 'AtomClassification':
-    if config_dict['model'] in ['DimeNetPlusPlus', 'SchNet']:
-        raise NotImplementedError
+    if config_dict['model'] == 'GraphUNet':
+        def forward_pass(data):
+            return model.forward(x=data.pos_abs, edge_index=data.edge_index, batch=data.batch)
+    elif config_dict['model'] == 'PMLP':
+        def forward_pass(data):
+            return model.forward(x=data.pos_abs, edge_index=data.edge_index)
     else:
         def forward_pass(data):
             return model.forward(x=data.pos_abs, edge_index=data.edge_index, edge_attr=data.edge_attr, batch=data.batch)
 elif config_dict['task'] in ['SpacegroupClassification', 'CrystalSystemClassification']:
-    if config_dict['model'] in ['DimeNetPlusPlus', 'SchNet']:
+    if config_dict['model'] in ['GraphUNet']:
         def forward_pass(data):
-            return model.forward(data.x[:,0], data.pos_abs)
+            return model.forward(x=torch.cat((data.x, data.pos_abs),dim=1), edge_index=data.edge_index, batch=data.batch)
+    elif config_dict['model'] == 'PMLP':
+        def forward_pass(data):
+            return model.forward(x=torch.cat((data.x, data.pos_abs),dim=1), edge_index=data.edge_index)
     else:
         def forward_pass(data):
             return model.forward(x=torch.cat((data.x, data.pos_abs),dim=1), edge_index=data.edge_index, edge_attr=data.edge_attr, batch=data.batch)
 elif config_dict['task'] == 'PositionRegression':
-    if config_dict['model'] in ['DimeNetPlusPlus', 'SchNet']:
-        raise NotImplementedError
+    if config_dict['model'] == 'GraphUNet':
+        def forward_pass(data):
+            return model.forward(x=data.x, edge_index=data.edge_index, batch=data.batch)
+    elif config_dict['model'] == 'PMLP':
+        def forward_pass(data):
+            return model.forward(x=data.x, edge_index=data.edge_index)
     else:
         def forward_pass(data):
             return model.forward(x=data.x, edge_index=data.edge_index, edge_attr=data.edge_attr, batch=data.batch)
@@ -132,11 +141,6 @@ for epoch in range(config_dict['Train_config']['epochs']):
             out = Linear(out.size(-1), 230).to(device)(out)
             ground_truth = torch.tensor(data.y['space_group_number'], device=device)
         elif config_dict['task'] == 'CrystalSystemClassification':
-            # print(data.x.size())
-            # print(data.pos_abs.size())
-            # print(data.edge_attr.size())
-            # print(data.edge_index.size())
-            # print(data.edge_index.max())
             out = forward_pass(data)
             out = global_mean_pool(out, data.batch)
             out = Linear(out.size(-1), 7).to(device)(out)
