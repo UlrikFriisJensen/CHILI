@@ -55,6 +55,24 @@ class InOrgMatDatasets(Dataset):
         extract_zip(path, self.raw_dir)
         Path(path).unlink()
 
+    def crystal_system_to_number(self, crystal_system):
+        if crystal_system == 'Triclinic':
+            return 0
+        elif crystal_system == 'Monoclinic':
+            return 1
+        elif crystal_system == 'Orthorhombic':
+            return 2
+        elif crystal_system == 'Tetragonal':
+            return 3
+        elif crystal_system == 'Trigonal':
+            return 4
+        elif crystal_system == 'Hexagonal':
+            return 5
+        elif crystal_system == 'Cubic':
+            return 6
+        else:
+            raise ValueError('Crystal system not recognized. Please use either "Triclinic", "Monoclinic", "Orthorhombic", "Tetragonal", "Trigonal", "Hexagonal" or "Cubic"')
+    
     def process(self):  
         idx = 0
         for raw_path in self.raw_paths:
@@ -72,6 +90,8 @@ class InOrgMatDatasets(Dataset):
                 crystal_type = h5f['GlobalLabels']['CrystalType'][()].decode()
                 space_group_symbol = h5f['GlobalLabels']['SpaceGroupSymbol'][()].decode()
                 space_group_number = h5f['GlobalLabels']['SpaceGroupNumber'][()]
+                crystal_system = h5f['GlobalLabels']['CrystalSystem'][()].decode()
+                crystal_system_number = self.crystal_system_to_number(crystal_system)
                 # Read scattering data
                 for key in h5f['DiscreteParticleGraphs'].keys():
                     # Read discrete particle graph attributes
@@ -87,6 +107,8 @@ class InOrgMatDatasets(Dataset):
                         crystal_type = crystal_type,
                         space_group_symbol = space_group_symbol,
                         space_group_number = space_group_number,
+                        crystal_system = crystal_system,
+                        crystal_system_number = crystal_system_number,
                         atomic_species = atomic_species,
                         n_atomic_species = len(atomic_species),
                         np_size = h5f['DiscreteParticleGraphs'][key]['NP size (Å)'][()],
@@ -246,6 +268,8 @@ class InOrgMatDatasets(Dataset):
                     'Space group (Symbol)',
                     'Space group (Number)', 
                     'Crystal type', 
+                    'Crystal system',
+                    'Crystal system (Number)',
                     'NP size (Å)', 
                     'Elements', 
                 ])
@@ -260,6 +284,8 @@ class InOrgMatDatasets(Dataset):
                     graph.y['space_group_symbol'],
                     float(graph.y['space_group_number']),
                     graph.y['crystal_type'], 
+                    graph.y['crystal_system'],
+                    graph.y['crystal_system_number'],
                     graph.y['np_size'], 
                     graph.y['atomic_species'], 
                 ]

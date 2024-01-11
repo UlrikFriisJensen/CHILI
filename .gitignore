@@ -167,3 +167,4 @@ Dataset/CIFs/ICSD*/
 Dataset/CIFs/COD*/
 Dataset/*/
 test*.*
+Results/*
