@@ -191,17 +191,17 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 out = forward_pass(data, 300)
                 ground_truth = data.y['saxs'][1,:]
                 # Min-max normalize saxs data
-                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)) / (torch.max(ground_truth, dim=-1) - torch.min(ground_truth, dim=-1))
+                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
             elif config_dict['task'] == 'XRDRegression':
                 out = forward_pass(data, 580)
                 ground_truth = data.y['xrd'][1,:]
                 # Min-max normalize xrd data
-                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)) / (torch.max(ground_truth, dim=-1) - torch.min(ground_truth, dim=-1))
+                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
             elif config_dict['task'] == 'xPDFRegression':
                 out = forward_pass(data, 6000)
                 ground_truth = data.y['xPDF'][1,:]
                 # Min-max normalize xpdf data
-                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)) / (torch.max(ground_truth, dim=-1) - torch.min(ground_truth, dim=-1))
+                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
             elif config_dict['task'] == 'DistanceRegression':
                 out = forward_pass(data)
                 out = torch.sum(out[data.edge_index[0,:]]*out[data.edge_index[1,:]], dim=-1)
@@ -246,19 +246,19 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     out = forward_pass(data, 300)
                     ground_truth = data.y['saxs'][1,:]
                     # Min-max normalize saxs data
-                    ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)) / (torch.max(ground_truth, dim=-1) - torch.min(ground_truth, dim=-1))
+                    ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
                     error += criterion(out, ground_truth)
                 elif config_dict['task'] == 'XRDRegression':
                     out = forward_pass(data, 580)
                     ground_truth = data.y['xrd'][1,:]
                     # Min-max normalize xrd data
-                    ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)) / (torch.max(ground_truth, dim=-1) - torch.min(ground_truth, dim=-1))
+                    ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
                     error += criterion(out, ground_truth)
                 elif config_dict['task'] == 'xPDFRegression':
                     out = forward_pass(data, 6000)
                     ground_truth = data.y['xPDF'][1,:]
                     # Min-max normalize xpdf data
-                    ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)) / (torch.max(ground_truth, dim=-1) - torch.min(ground_truth, dim=-1))
+                    ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
                     error += criterion(out, ground_truth)
                 elif config_dict['task'] == 'DistanceRegression':
                     out = forward_pass(data)
@@ -374,19 +374,19 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 out = forward_pass(data, 300)
                 ground_truth = data.y['saxs'][1,:]
                 # Min-max normalize saxs data
-                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)) / (torch.max(ground_truth, dim=-1) - torch.min(ground_truth, dim=-1))
+                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
                 error += criterion(out, ground_truth)
             elif config_dict['task'] == 'XRDRegression':
                 out = forward_pass(data, 580)
                 ground_truth = data.y['xrd'][1,:]
                 # Min-max normalize xrd data
-                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)) / (torch.max(ground_truth, dim=-1) - torch.min(ground_truth, dim=-1))
+                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
                 error += criterion(out, ground_truth)
             elif config_dict['task'] == 'xPDFRegression':
                 out = forward_pass(data, 6000)
                 ground_truth = data.y['xPDF'][1,:]
                 # Min-max normalize xpdf data
-                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)) / (torch.max(ground_truth, dim=-1) - torch.min(ground_truth, dim=-1))
+                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
                 error += criterion(out, ground_truth)
             elif config_dict['task'] == 'DistanceRegression':
                 out = forward_pass(data)
