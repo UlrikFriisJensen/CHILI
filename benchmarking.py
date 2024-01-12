@@ -12,7 +12,7 @@ import warnings
 import time
 import pandas as pd
 from torch_geometric.seed import seed_everything
-from torcheval.metrics import MulticlassF1Score, MeanSquaredError
+from torcheval.metrics import MulticlassF1Score
 from glob import glob
 import os
 
@@ -50,7 +50,7 @@ except FileNotFoundError:
     dataset.load_data_split(split_strategy='random')    
     
 # Create dataframe for saving results
-results_df = pd.DataFrame(columns=['Model', 'Dataset', 'Task', 'Seed', 'Train samples', 'Val samples', 'Test samples', 'Train time', 'Trainable parameters', 'Train loss', 'Val F1-score', 'Test F1-score', 'Val MAE', 'Test MAE'])
+results_df = pd.DataFrame(columns=['Model', 'Dataset', 'Task', 'Seed', 'Train samples', 'Val samples', 'Test samples', 'Train time', 'Trainable parameters', 'Train loss', 'Val F1-score', 'Test F1-score', 'Val posMAE/MSE', 'Test posMAE/MSE'])
 
 print(f'\nModel: {config_dict["model"]}\nDataset: {config_dict["dataset"]}\nTask: {config_dict["task"]}', flush=True)
 print('\n', flush=True)
@@ -159,6 +159,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
     elif config_dict['task'] in ['PositionRegression', 'SAXSRegression', 'XRDRegression', 'xPDFRegression', 'DistanceRegression']:
         n_classes = 1
         criterion = torch.nn.SmoothL1Loss()
+        metric = torch.nn.MSELoss()
     else:
         raise NotImplementedError
     
@@ -254,24 +255,24 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     ground_truth = data.y['saxs'][1,:]
                     # Min-max normalize saxs data
                     ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
-                    error += criterion(out, ground_truth)
+                    error += metric(out, ground_truth)
                 elif config_dict['task'] == 'XRDRegression':
                     out = forward_pass(data, 580)
                     ground_truth = data.y['xrd'][1,:]
                     # Min-max normalize xrd data
                     ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
-                    error += criterion(out, ground_truth)
+                    error += metric(out, ground_truth)
                 elif config_dict['task'] == 'xPDFRegression':
                     out = forward_pass(data, 6000)
                     ground_truth = data.y['xPDF'][1,:]
                     # Min-max normalize xpdf data
                     ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
-                    error += criterion(out, ground_truth)
+                    error += metric(out, ground_truth)
                 elif config_dict['task'] == 'DistanceRegression':
                     out = forward_pass(data)
                     out = torch.sum(out[data.edge_index[0,:]]*out[data.edge_index[1,:]], dim=-1)
                     ground_truth = data.edge_attr   
-                    error += criterion(out, ground_truth) 
+                    error += metric(out, ground_truth) 
         
         # Log training progress
         writer.add_scalar('Loss/train', train_loss, epoch)
@@ -331,8 +332,8 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 writer.add_scalar('posMAE/val', val_error, epoch)
                 print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val position MAE: {val_error:.4f}', flush=True)
             else:
-                writer.add_scalar('MAE/val', val_error, epoch)
-                print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val MAE: {val_error:.4f}', flush=True)
+                writer.add_scalar('MSE/val', val_error, epoch)
+                print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val MSE: {val_error:.4f}', flush=True)
         
         # Save latest model
         torch.save({
@@ -382,24 +383,24 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 ground_truth = data.y['saxs'][1,:]
                 # Min-max normalize saxs data
                 ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
-                error += criterion(out, ground_truth)
+                error += metric(out, ground_truth)
             elif config_dict['task'] == 'XRDRegression':
                 out = forward_pass(data, 580)
                 ground_truth = data.y['xrd'][1,:]
                 # Min-max normalize xrd data
                 ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
-                error += criterion(out, ground_truth)
+                error += metric(out, ground_truth)
             elif config_dict['task'] == 'xPDFRegression':
                 out = forward_pass(data, 6000)
                 ground_truth = data.y['xPDF'][1,:]
                 # Min-max normalize xpdf data
                 ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
-                error += criterion(out, ground_truth)
+                error += metric(out, ground_truth)
             elif config_dict['task'] == 'DistanceRegression':
                 out = forward_pass(data)
                 out = torch.sum(out[data.edge_index[0,:]]*out[data.edge_index[1,:]], dim=-1)
                 ground_truth = data.edge_attr   
-                error += criterion(out, ground_truth)   
+                error += metric(out, ground_truth)   
 
     if 'Classification' in config_dict['task']:
         test_error = torch.tensor(0)
@@ -416,9 +417,9 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
 
             print(f'Test position MAE: {test_error:.4f}', flush=True)
         else:
-            writer.add_scalar('MAE/test', test_error, epoch)
+            writer.add_scalar('MSE/test', test_error, epoch)
 
-            print(f'Test MAE: {test_error:.4f}', flush=True)
+            print(f'Test MSE: {test_error:.4f}', flush=True)
 
     # Close TensorBoard writer
     writer.close()
