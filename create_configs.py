@@ -6,7 +6,7 @@ from pathlib import Path
 models = ['GCN', 'GAT', 'GIN', 'GraphSAGE', 'EdgeCNN', 'GraphUNet', 'PMLP']
 # Path to datasets
 datasetRoot = './Dataset/'
-datasetNames = ['Simulated_rmax60_v4']#S, 'COD_subset_v4']
+datasetNames = ['Simulated_rmax60_v4', 'COD_subset_v4']
 # Directory to save results in
 saveDir = './Results/'
 # tasks to test
