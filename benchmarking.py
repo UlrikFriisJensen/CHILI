@@ -157,7 +157,8 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
         raise NotImplementedError
     
     # Define TensorBoard writer
-    writer = SummaryWriter(f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['task']}/{config_dict['model']}/seed{seed}")
+    save_dir = f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['task']}/{config_dict['model']}/seed{seed}"
+    writer = SummaryWriter(save_dir)
 
     # Set training time (in seconds)
     max_training_time = config_dict['Train_config']['train_time']
@@ -284,7 +285,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     'model_state_dict': model.state_dict(), 
                     'optimizer_state_dict': optimizer.state_dict(),
                     },
-                    f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['model']}_{config_dict['task']}/seed{seed}/best.pt"
+                    f"{save_dir}/best.pt"
                     )
             elif val_accuracy > best_val_accuracy:
                 torch.save({
@@ -292,7 +293,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     'model_state_dict': model.state_dict(), 
                     'optimizer_state_dict': optimizer.state_dict(),
                     },
-                    f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['model']}_{config_dict['task']}/seed{seed}/best.pt"
+                    f"{save_dir}/best.pt"
                     )
                 best_val_accuracy = val_accuracy
             
@@ -309,7 +310,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     'model_state_dict': model.state_dict(), 
                     'optimizer_state_dict': optimizer.state_dict(),
                     },
-                    f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['model']}_{config_dict['task']}/seed{seed}/best.pt"
+                    f"{save_dir}/best.pt"
                     )
             elif val_error < best_val_error:
                 torch.save({
@@ -317,7 +318,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     'model_state_dict': model.state_dict(), 
                     'optimizer_state_dict': optimizer.state_dict(),
                     },
-                    f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['model']}_{config_dict['task']}/seed{seed}/best.pt"
+                    f"{save_dir}/best.pt"
                     )
                 best_val_error = val_error
             if 'PositionRegression' in config_dict['task']:
@@ -333,13 +334,13 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
             'model_state_dict': model.state_dict(), 
             'optimizer_state_dict': optimizer.state_dict(),
             },
-            f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['model']}_{config_dict['task']}/seed{seed}/latest.pt"
+            f"{save_dir}/latest.pt"
             )
     # Record stop time
     stop_time = time.time()
     
     # Load best model
-    checkpoint = torch.load(f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['model']}_{config_dict['task']}/seed{seed}/best.pt")
+    checkpoint = torch.load(f"{save_dir}/best.pt")
     model.load_state_dict(checkpoint['model_state_dict'])
     epoch = checkpoint['epoch']
     # Evaluate the model on the test set using the best epoch
@@ -421,4 +422,4 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
     results_df.loc[i] = [config_dict['model'], config_dict['dataset'], config_dict['task'], seed, len(dataset.train_set), len(dataset.validation_set), len(dataset.test_set), stop_time - start_time, sum(p.numel() for p in model.parameters() if p.requires_grad), train_loss, val_accuracy, test_accuracy, val_error.detach().cpu().numpy(), test_error.detach().cpu().numpy()]
     
 # Save results to csv file
-results_df.to_csv(f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['model']}_{config_dict['task']}/results.csv")
+results_df.to_csv(f"{save_dir}/../results.csv")
