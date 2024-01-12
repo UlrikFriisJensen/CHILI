@@ -12,6 +12,7 @@ import warnings
 import time
 import pandas as pd
 from torch_geometric.seed import seed_everything
+from torcheval.metrics import MulticlassF1Score, MeanSquaredError
 
 warnings.simplefilter(action='ignore')
 
@@ -49,7 +50,7 @@ except FileNotFoundError:
     
     
 # Create dataframe for saving results
-results_df = pd.DataFrame(columns=['Model', 'Dataset', 'Task', 'Seed', 'Train samples', 'Val samples', 'Test samples', 'Train time', 'Trainable parameters', 'Train loss', 'Val accuracy', 'Test accuracy', 'Val MAE', 'Test MAE'])
+results_df = pd.DataFrame(columns=['Model', 'Dataset', 'Task', 'Seed', 'Train samples', 'Val samples', 'Test samples', 'Train time', 'Trainable parameters', 'Train loss', 'Val F1-score', 'Test F1-score', 'Val MAE', 'Test MAE'])
 
 print(f'\nModel: {config_dict["model"]}\nDataset: {config_dict["dataset"]}\nTask: {config_dict["task"]}')
 print('\n')
@@ -149,8 +150,12 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
     optimizer = torch.optim.Adam(model.parameters(), lr=config_dict['Train_config']['learning_rate'])
     if config_dict['task'] in ['AtomClassification', 'SpacegroupClassification', 'CrystalSystemClassification']:
         criterion = torch.nn.CrossEntropyLoss()
-    # elif config_dict['task'] in ['PositionRegression']:
-    #     criterion = torch.nn.MSELoss()
+        if config_dict['task'] == 'AtomClassification':
+            n_classes = 118
+        elif config_dict['task'] == 'SpacegroupClassification':
+            n_classes = 230
+        elif config_dict['task'] == 'CrystalSystemClassification':
+            n_classes = 7
     elif config_dict['task'] in ['PositionRegression', 'SAXSRegression', 'XRDRegression', 'xPDFRegression', 'DistanceRegression']:
         criterion = torch.nn.SmoothL1Loss()
     else:
@@ -222,25 +227,30 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
         total = 0
 
         with torch.no_grad():
+            MC_F1 = MulticlassF1Score(num_classes=n_classes, average='weighted')
             for data in val_loader:
                 data = data.to(device)
                 if config_dict['task'] == 'AtomClassification':
                     out = forward_pass(data)
                     _, predicted = torch.max(out.data, 1)
-                    total += data.x[:,0].size(0)
-                    correct += (predicted == data.x[:,0].long()).sum().item()
+                    ground_truth = data.x[:,0].long()
+                    MC_F1.update(predicted, ground_truth)
+                    # total += data.x[:,0].size(0)
+                    # correct += (predicted == data.x[:,0].long()).sum().item()
                 elif config_dict['task'] == 'SpacegroupClassification':
                     out = forward_pass(data, 230)
                     _, predicted = torch.max(out.data, 1)
                     ground_truth = torch.tensor(data.y['space_group_number'], device=device)
-                    total += ground_truth.size(0)
-                    correct += (predicted == ground_truth).sum().item()
+                    MC_F1.update(predicted, ground_truth)
+                    # total += ground_truth.size(0)
+                    # correct += (predicted == ground_truth).sum().item()
                 elif config_dict['task'] == 'CrystalSystemClassification':
                     out = forward_pass(data, 7)
                     _, predicted = torch.max(out.data, 1)
                     ground_truth = torch.tensor(data.y['crystal_system_number'], device=device)
-                    total += ground_truth.size(0)
-                    correct += (predicted == ground_truth).sum().item()
+                    MC_F1.update(predicted, ground_truth)
+                    # total += ground_truth.size(0)
+                    # correct += (predicted == ground_truth).sum().item()
                 elif config_dict['task'] == 'PositionRegression':
                     out = forward_pass(data)
                     error += position_MAE(out, data.pos_abs)
@@ -274,12 +284,13 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
         # Log validation progress
         if 'Classification' in config_dict['task']:
             val_error = torch.tensor(0)
-            val_accuracy = correct / total
-            writer.add_scalar('Accuracy/val', val_accuracy, epoch)
+            val_f1 = MC_F1.compute()
+            writer.add_scalar('F1-score/val', val_f1, epoch)
+            
             
             # Save model if validation accuracy is improved
             if epoch == 0:
-                best_val_accuracy = val_accuracy
+                best_val_f1 = val_f1
                 torch.save({
                     'epoch': epoch+1,
                     'model_state_dict': model.state_dict(), 
@@ -287,7 +298,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     },
                     f"{save_dir}/best.pt"
                     )
-            elif val_accuracy > best_val_accuracy:
+            elif val_f1 > best_val_f1:
                 torch.save({
                     'epoch': epoch+1,
                     'model_state_dict': model.state_dict(), 
@@ -295,11 +306,11 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     },
                     f"{save_dir}/best.pt"
                     )
-                best_val_accuracy = val_accuracy
+                best_val_f1 = val_f1
             
-            print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val Accuracy: {val_accuracy:.4f}')
+            print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val F1-score: {val_f1:.4f}')
         elif 'Regression' in config_dict['task']:
-            val_accuracy = 0
+            val_f1 = 0
             val_error = error / len(val_loader)
             
             # Save model if validation error is improved
@@ -350,25 +361,24 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
     total = 0
 
     with torch.no_grad():
+        MC_F1 = MulticlassF1Score(num_classes=n_classes, average='weighted')
         for data in test_loader:
             data = data.to(device)
             if config_dict['task'] == 'AtomClassification':
                 out = forward_pass(data)
                 _, predicted = torch.max(out.data, 1)
-                total += data.x[:,0].size(0)
-                correct += (predicted == data.x[:,0].long()).sum().item()
+                ground_truth = data.x[:,0].long()
+                MC_F1.update(predicted, ground_truth)
             elif config_dict['task'] == 'SpacegroupClassification':
                 out = forward_pass(data, 230)
                 _, predicted = torch.max(out.data, 1)
                 ground_truth = torch.tensor(data.y['space_group_number'], device=device)
-                total += ground_truth.size(0)
-                correct += (predicted == ground_truth).sum().item()
+                MC_F1.update(predicted, ground_truth)
             elif config_dict['task'] == 'CrystalSystemClassification':
                 out = forward_pass(data, 7)
                 _, predicted = torch.max(out.data, 1)
                 ground_truth = torch.tensor(data.y['crystal_system_number'], device=device)
-                total += ground_truth.size(0)
-                correct += (predicted == ground_truth).sum().item()
+                MC_F1.update(predicted, ground_truth)
             elif config_dict['task'] == 'PositionRegression':
                 out = forward_pass(data)
                 error += position_MAE(out, data.pos_abs)
@@ -398,13 +408,13 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
 
     if 'Classification' in config_dict['task']:
         test_error = torch.tensor(0)
-        test_accuracy = correct / total
+        test_f1 = MC_F1.compute()
 
-        writer.add_scalar('Accuracy/test', test_accuracy, epoch)
+        writer.add_scalar('F1-score/test', test_f1, epoch)
 
-        print(f'Test Accuracy: {test_accuracy:.4f}')
+        print(f'Test F1-score: {test_f1:.4f}')
     elif 'Regression' in config_dict['task']:
-        test_accuracy = 0
+        test_f1 = 0
         test_error = error / len(test_loader)
         if 'PositionRegression' in config_dict['task']:
             writer.add_scalar('posMAE/test', test_error, epoch)
@@ -419,7 +429,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
     writer.close()
 
     # Add results to dataframe
-    results_df.loc[i] = [config_dict['model'], config_dict['dataset'], config_dict['task'], seed, len(dataset.train_set), len(dataset.validation_set), len(dataset.test_set), stop_time - start_time, sum(p.numel() for p in model.parameters() if p.requires_grad), train_loss, val_accuracy, test_accuracy, val_error.detach().cpu().numpy(), test_error.detach().cpu().numpy()]
+    results_df.loc[i] = [config_dict['model'], config_dict['dataset'], config_dict['task'], seed, len(dataset.train_set), len(dataset.validation_set), len(dataset.test_set), stop_time - start_time, sum(p.numel() for p in model.parameters() if p.requires_grad), train_loss, val_f1, test_f1, val_error.detach().cpu().numpy(), test_error.detach().cpu().numpy()]
     
 # Save results to csv file
 results_df.to_csv(f"{save_dir}/../results.csv")
