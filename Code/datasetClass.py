@@ -27,6 +27,8 @@ from sklearn.model_selection import train_test_split
 class InOrgMatDatasets(Dataset):
     def __init__(self, dataset, root='./', transform=None, pre_transform=None, pre_filter=None):
         self.dataset = dataset
+        if not Path(root).exists():
+            Path(root).mkdir(include_parents=True)
         root += self.dataset + '/'
         self.train_set = None
         self.validation_set = None
