@@ -161,6 +161,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
         elif config_dict['task'] == 'CrystalSystemClassification':
             n_classes = 7
     elif config_dict['task'] in ['PositionRegression', 'SAXSRegression', 'XRDRegression', 'xPDFRegression', 'DistanceRegression']:
+        n_classes = 1
         criterion = torch.nn.SmoothL1Loss()
     else:
         raise NotImplementedError
