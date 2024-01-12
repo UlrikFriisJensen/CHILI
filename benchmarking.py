@@ -56,20 +56,20 @@ except FileNotFoundError:
 # Create dataframe for saving results
 results_df = pd.DataFrame(columns=['Model', 'Dataset', 'Task', 'Seed', 'Train samples', 'Val samples', 'Test samples', 'Train time', 'Trainable parameters', 'Train loss', 'Val F1-score', 'Test F1-score', 'Val MAE', 'Test MAE'])
 
-print(f'\nModel: {config_dict["model"]}\nDataset: {config_dict["dataset"]}\nTask: {config_dict["task"]}')
-print('\n')
-print(f'Number of training samples: {len(dataset.train_set)}')
-print(f'Number of validation samples: {len(dataset.validation_set)}')
-print(f'Number of test samples: {len(dataset.test_set)}')
-print('\n')
-print(f'Device: {device}')
+print(f'\nModel: {config_dict["model"]}\nDataset: {config_dict["dataset"]}\nTask: {config_dict["task"]}', flush=True)
+print('\n', flush=True)
+print(f'Number of training samples: {len(dataset.train_set)}', flush=True)
+print(f'Number of validation samples: {len(dataset.validation_set)}', flush=True)
+print(f'Number of test samples: {len(dataset.test_set)}', flush=True)
+print('\n', flush=True)
+print(f'Device: {device}', flush=True)
 
 # Train model for each seed
 for i, seed in enumerate(config_dict['Train_config']['seeds']):
     # Set seed
     seed_everything(seed)
     
-    print(f'\nSeed: {seed}\n')
+    print(f'\nSeed: {seed}\n', flush=True)
 
     # Define your model
     if config_dict['model'] == 'GCN':
@@ -313,7 +313,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     )
                 best_val_f1 = val_f1
             
-            print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val F1-score: {val_f1:.4f}')
+            print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val F1-score: {val_f1:.4f}', flush=True)
         elif 'Regression' in config_dict['task']:
             val_f1 = 0
             val_error = error / len(val_loader)
@@ -339,10 +339,10 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 best_val_error = val_error
             if 'PositionRegression' in config_dict['task']:
                 writer.add_scalar('posMAE/val', val_error, epoch)
-                print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val position MAE: {val_error:.4f}')
+                print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val position MAE: {val_error:.4f}', flush=True)
             else:
                 writer.add_scalar('MAE/val', val_error, epoch)
-                print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val MAE: {val_error:.4f}')
+                print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val MAE: {val_error:.4f}', flush=True)
         
         # Save latest model
         torch.save({
@@ -417,18 +417,18 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
 
         writer.add_scalar('F1-score/test', test_f1, epoch)
 
-        print(f'Test F1-score: {test_f1:.4f}')
+        print(f'Test F1-score: {test_f1:.4f}', flush=True)
     elif 'Regression' in config_dict['task']:
         test_f1 = 0
         test_error = error / len(test_loader)
         if 'PositionRegression' in config_dict['task']:
             writer.add_scalar('posMAE/test', test_error, epoch)
 
-            print(f'Test position MAE: {test_error:.4f}')
+            print(f'Test position MAE: {test_error:.4f}', flush=True)
         else:
             writer.add_scalar('MAE/test', test_error, epoch)
 
-            print(f'Test MAE: {test_error:.4f}')
+            print(f'Test MAE: {test_error:.4f}', flush=True)
 
     # Close TensorBoard writer
     writer.close()
