@@ -47,11 +47,7 @@ try:
     dataset.load_data_split(split_strategy='random')
 except FileNotFoundError:
     dataset.create_data_split(split_strategy='random', test_size=0.1)
-    dataset.load_data_split(split_strategy='random')
-
-# Min-max normalize saxs, xrd and xpdf data
-# if config_dict['task'] in ['SAXSRegression', 'XRDRegression', 'xPDFRegression']:
-    
+    dataset.load_data_split(split_strategy='random')    
     
 # Create dataframe for saving results
 results_df = pd.DataFrame(columns=['Model', 'Dataset', 'Task', 'Seed', 'Train samples', 'Val samples', 'Test samples', 'Train time', 'Trainable parameters', 'Train loss', 'Val F1-score', 'Test F1-score', 'Val MAE', 'Test MAE'])
@@ -79,7 +75,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
     elif config_dict['model'] == 'GIN':
         model = GIN(**config_dict['Model_config']).to(device)
     elif config_dict['model'] == 'GAT':
-        model = GAT(**config_dict['Model_config']).to(device)
+        model = GAT(**config_dict['Model_config'], v2=True).to(device)
     elif config_dict['model'] == 'EdgeCNN':
         model = EdgeCNN(**config_dict['Model_config']).to(device)
     elif config_dict['model'] == 'GraphUNet':
@@ -240,22 +236,16 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     _, predicted = torch.max(out.data, 1)
                     ground_truth = data.x[:,0].long()
                     MC_F1.update(predicted, ground_truth)
-                    # total += data.x[:,0].size(0)
-                    # correct += (predicted == data.x[:,0].long()).sum().item()
                 elif config_dict['task'] == 'SpacegroupClassification':
                     out = forward_pass(data, 230)
                     _, predicted = torch.max(out.data, 1)
                     ground_truth = torch.tensor(data.y['space_group_number'], device=device)
                     MC_F1.update(predicted, ground_truth)
-                    # total += ground_truth.size(0)
-                    # correct += (predicted == ground_truth).sum().item()
                 elif config_dict['task'] == 'CrystalSystemClassification':
                     out = forward_pass(data, 7)
                     _, predicted = torch.max(out.data, 1)
                     ground_truth = torch.tensor(data.y['crystal_system_number'], device=device)
                     MC_F1.update(predicted, ground_truth)
-                    # total += ground_truth.size(0)
-                    # correct += (predicted == ground_truth).sum().item()
                 elif config_dict['task'] == 'PositionRegression':
                     out = forward_pass(data)
                     error += position_MAE(out, data.pos_abs)

@@ -15,6 +15,7 @@ tasks = ['AtomClassification', 'PositionRegression', 'DistanceRegression', 'Crys
 # Model configuration
 # Number of GNN layers to use
 num_layers = 2
+num_layers_name = 'num_layers'
 # Number of hidden features to use
 hidden_features = 32
 
@@ -38,6 +39,14 @@ if not Path('./benchmark_configs').exists():
 # Create config files
 for datasetName in datasetNames:
     for model in models:
+        if model == 'GAT':
+            hidden_features = 64
+        elif model == 'EdgeCNN':
+            num_layers = 4
+            hidden_features = 64
+        elif model == 'GraphUNet':
+            num_layers = 4
+            num_layers_name = 'depth'
         for task in tasks:
             # Number of input features to use
             if task == 'AtomClassification':
@@ -62,7 +71,7 @@ for datasetName in datasetNames:
                 'model': model,
                 'task': task,
                 'Model_config': {
-                    'num_layers': num_layers,
+                    num_layers_name: num_layers,
                     'in_channels': input_features,
                     'hidden_channels': hidden_features,
                     'out_channels': output_features,
