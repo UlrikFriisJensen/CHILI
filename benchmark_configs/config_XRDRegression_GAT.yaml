@@ -1,0 +1,19 @@
+Model_config:
+  hidden_channels: 32
+  in_channels: 7
+  num_layers: 2
+  out_channels: 64
+Train_config:
+  batch_size: 10
+  epochs: 2
+  learning_rate: 0.01
+  seeds:
+  - 42
+  - 43
+  - 44
+  train_time: 3600
+dataset: COD_subset_v4
+log_dir: ./Results/
+model: GAT
+root: ./Dataset/
+task: XRDRegression

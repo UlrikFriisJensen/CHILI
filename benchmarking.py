@@ -11,6 +11,7 @@ import yaml
 import warnings
 import time
 import pandas as pd
+from torch_geometric.seed import seed_everything
 
 warnings.simplefilter(action='ignore')
 
@@ -61,7 +62,7 @@ print(f'Device: {device}')
 # Train model for each seed
 for i, seed in enumerate(config_dict['Train_config']['seeds']):
     # Set seed
-    torch.manual_seed(seed)
+    seed_everything(seed)
     
     print(f'\nSeed: {seed}\n')
 
@@ -156,7 +157,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
         raise NotImplementedError
     
     # Define TensorBoard writer
-    writer = SummaryWriter(f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['model']}_{config_dict['task']}/seed{seed}")
+    writer = SummaryWriter(f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['task']}/{config_dict['model']}/seed{seed}")
 
     # Set training time (in seconds)
     max_training_time = config_dict['Train_config']['train_time']
