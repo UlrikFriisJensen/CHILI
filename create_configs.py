@@ -24,9 +24,9 @@ hidden_features = 32
 # Learning rate to use
 learning_rate = 0.01
 # Batch size to use
-batch_size = 10
+batch_size = 32
 # Number of epochs to train for
-epochs = 2
+epochs = 1000
 # Max training time in seconds
 train_time = 3600 # 3600 seconds = 1 hour
 # Seeds to use
