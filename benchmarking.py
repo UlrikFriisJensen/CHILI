@@ -12,6 +12,8 @@ import warnings
 import time
 import pandas as pd
 from torch_geometric.seed import seed_everything
+from glob import glob
+import os
 
 warnings.simplefilter(action='ignore')
 
@@ -24,11 +26,13 @@ def position_MAE(pred_xyz, true_xyz):
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Benchmarking script')
-parser.add_argument('--config', type=str, help='Path to configuration file')
+parser.add_argument('--config_folder', type=str, help='Path to folder containing configuration files')
+parser.add_argument('--config_index', type=str, help='Index for cluster array')
 args = parser.parse_args()
 
 # Read configuration file
-config_path = args.config
+config_files = glob(os.path.join(args.config_folder, '*.yml'))
+config_path = config_files[int(args.config_index)]
 
 with open(config_path, 'r') as file:
     config_dict = yaml.safe_load(file)
