@@ -6,7 +6,7 @@ from pathlib import Path
 models = ['GCN', 'GAT', 'GIN', 'GraphSAGE', 'EdgeCNN', 'GraphUNet', 'PMLP']
 # Path to datasets
 datasetRoot = './Dataset/'
-datasetNames = ['Simulated_rmax60_v4', 'COD_subset_v4']
+datasetNames = ['Simulated_rmax60_v4']#S, 'COD_subset_v4']
 # Directory to save results in
 saveDir = './Results/'
 # tasks to test
@@ -30,6 +30,10 @@ epochs = 2
 train_time = 3600 # 3600 seconds = 1 hour
 # Seeds to use
 seeds = [42, 43, 44]
+
+# Create save directory if it doesn't exist
+if not Path('./benchmark_configs').exists():
+    Path('./benchmark_configs').mkdir()
 
 # Create config files
 for datasetName in datasetNames:
@@ -72,7 +76,7 @@ for datasetName in datasetNames:
                 }
             }
             # Create config file path
-            configPath = Path(f'./benchmark_configs/config_{task}_{model}.yaml')
+            configPath = Path(f'./benchmark_configs/config_{datasetName}_{task}_{model}.yaml')
             # Create config file
             with open(configPath, 'w') as file:
                 documents = yaml.dump(config, file)
