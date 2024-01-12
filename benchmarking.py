@@ -31,7 +31,7 @@ parser.add_argument('--config_index', type=str, help='Index for cluster array')
 args = parser.parse_args()
 
 # Read configuration file
-config_files = glob(os.path.join(args.config_folder, '*.yml'))
+config_files = glob(os.path.join(args.config_folder, '*.yaml'))
 config_path = config_files[int(args.config_index)]
 
 with open(config_path, 'r') as file:
