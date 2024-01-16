@@ -4,9 +4,10 @@ Model_config:
   num_layers: 2
   out_channels: 3
 Train_config:
-  batch_size: 10
-  epochs: 2
+  batch_size: 16
+  epochs: 1000
   learning_rate: 0.01
+  max_patience: 5
   seeds:
   - 42
   - 43
@@ -16,4 +17,5 @@ dataset: Simulated_rmax60_v4
 log_dir: ./Results/
 model: GCN
 root: ./Dataset/
+save_latest_model: false
 task: PositionRegression

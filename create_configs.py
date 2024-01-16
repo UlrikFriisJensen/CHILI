@@ -6,31 +6,27 @@ from pathlib import Path
 models = ['GCN', 'GAT', 'GIN', 'GraphSAGE', 'EdgeCNN', 'GraphUNet', 'PMLP']
 # Path to datasets
 datasetRoot = './Dataset/'
-datasetNames = ['Simulated_rmax60_v4', 'COD_subset_v4']
+datasetNames = ['Simulated_rmax60_v4']#, 'COD_subset_v4']
 # Directory to save results in
 saveDir = './Results/'
 # tasks to test
 tasks = ['AtomClassification', 'PositionRegression', 'DistanceRegression', 'CrystalSystemClassification', 'SpacegroupClassification', 'SAXSRegression', 'XRDRegression', 'xPDFRegression']
 
-# Model configuration
-# Number of GNN layers to use
-num_layers = 2
-num_layers_name = 'num_layers'
-# Number of hidden features to use
-hidden_features = 32
-
-
 # Training configuration
 # Learning rate to use
 learning_rate = 0.01
 # Batch size to use
-batch_size = 32
+batch_size = 16
 # Number of epochs to train for
 epochs = 1000
 # Max training time in seconds
 train_time = 3600 # 3600 seconds = 1 hour
 # Seeds to use
 seeds = [42, 43, 44]
+# Patience
+max_patience = 5
+# save latest model
+save_latest_model = False
 
 # Create save directory if it doesn't exist
 if not Path('./benchmark_configs').exists():
@@ -39,13 +35,20 @@ if not Path('./benchmark_configs').exists():
 # Create config files
 for datasetName in datasetNames:
     for model in models:
+        # Model configuration
+        # Number of GNN layers to use
+        num_layers = 2
+        num_layers_name = 'num_layers'
+        # Number of hidden features to use
+        hidden_features = 32
+
         if model == 'GAT':
             hidden_features = 64
         elif model == 'EdgeCNN':
             num_layers = 4
             hidden_features = 64
         elif model == 'GraphUNet':
-            num_layers = 4
+            num_layers = 2
             num_layers_name = 'depth'
         for task in tasks:
             # Number of input features to use
@@ -70,6 +73,7 @@ for datasetName in datasetNames:
                 'log_dir': saveDir,
                 'model': model,
                 'task': task,
+                'save_latest_model': save_latest_model,
                 'Model_config': {
                     num_layers_name: num_layers,
                     'in_channels': input_features,
@@ -81,7 +85,8 @@ for datasetName in datasetNames:
                     'batch_size': batch_size,
                     'epochs': epochs,
                     'train_time': train_time,
-                    'seeds': seeds
+                    'seeds': seeds,
+                    'max_patience': max_patience,
                 }
             }
             # Create config file path

@@ -75,7 +75,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
     elif config_dict['model'] == 'GIN':
         model = GIN(**config_dict['Model_config']).to(device)
     elif config_dict['model'] == 'GAT':
-        model = GAT(**config_dict['Model_config'], v2=True).to(device)
+        model = GAT(**config_dict['Model_config'], v2=False).to(device)
     elif config_dict['model'] == 'EdgeCNN':
         model = EdgeCNN(**config_dict['Model_config']).to(device)
     elif config_dict['model'] == 'GraphUNet':
@@ -171,12 +171,18 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
     max_training_time = config_dict['Train_config']['train_time']
     start_time = time.time()
     epoch = 0
-    
+
+    # Patience
+    max_patience = config_dict['Train_config']['max_patience']
+    patience = 0
 
     # Training loop
     for epoch in range(config_dict['Train_config']['epochs']):
         # Stop training if max training time is exceeded
         if time.time() - start_time > max_training_time:
+            break
+        if patience >= max_patience:
+            print('Max Patience reached, quitting...', flush=True)
             break
         model.train()
         total_loss = 0
@@ -283,7 +289,6 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
             val_f1 = MC_F1.compute()
             writer.add_scalar('F1-score/val', val_f1, epoch)
             
-            
             # Save model if validation accuracy is improved
             if epoch == 0:
                 best_val_f1 = val_f1
@@ -295,6 +300,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     f"{save_dir}/best.pt"
                     )
             elif val_f1 > best_val_f1:
+                patience = 0
                 torch.save({
                     'epoch': epoch+1,
                     'model_state_dict': model.state_dict(), 
@@ -303,6 +309,8 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     f"{save_dir}/best.pt"
                     )
                 best_val_f1 = val_f1
+            else:
+                patience += 1
             
             print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val F1-score: {val_f1:.4f}', flush=True)
         elif 'Regression' in config_dict['task']:
@@ -320,6 +328,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     f"{save_dir}/best.pt"
                     )
             elif val_error < best_val_error:
+                patience = 0
                 torch.save({
                     'epoch': epoch+1,
                     'model_state_dict': model.state_dict(), 
@@ -328,6 +337,9 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     f"{save_dir}/best.pt"
                     )
                 best_val_error = val_error
+            else:
+                patience += 1
+
             if 'PositionRegression' in config_dict['task']:
                 writer.add_scalar('posMAE/val', val_error, epoch)
                 print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val position MAE: {val_error:.4f}', flush=True)
@@ -336,13 +348,14 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val MSE: {val_error:.4f}', flush=True)
         
         # Save latest model
-        torch.save({
-            'epoch': epoch+1,
-            'model_state_dict': model.state_dict(), 
-            'optimizer_state_dict': optimizer.state_dict(),
-            },
-            f"{save_dir}/latest.pt"
-            )
+        if config_dict['save_latest_model']:
+            torch.save({
+                'epoch': epoch+1,
+                'model_state_dict': model.state_dict(), 
+                'optimizer_state_dict': optimizer.state_dict(),
+                },
+                f"{save_dir}/latest.pt"
+                )
     # Record stop time
     stop_time = time.time()
     
