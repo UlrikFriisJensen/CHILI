@@ -3,14 +3,15 @@ from pathlib import Path
 
 # Top level configuration
 # Models to test
-models = ['GCN', 'GAT', 'GIN', 'GraphSAGE', 'EdgeCNN', 'GraphUNet', 'PMLP']
+models = ['MLP']#['GCN', 'GAT', 'GIN', 'GraphSAGE', 'EdgeCNN', 'GraphUNet', 'PMLP', 'MLP']
 # Path to datasets
 datasetRoot = './Dataset/'
 datasetNames = ['Simulated_rmax60_v4']#, 'COD_subset_v4']
 # Directory to save results in
 saveDir = './Results/'
 # tasks to test
-tasks = ['AtomClassification', 'PositionRegression', 'DistanceRegression', 'CrystalSystemClassification', 'SpacegroupClassification', 'SAXSRegression', 'XRDRegression', 'xPDFRegression']
+#tasks = ['AtomClassification', 'PositionRegression', 'DistanceRegression', 'CrystalSystemClassification', 'SpacegroupClassification', 'SAXSRegression', 'XRDRegression', 'xPDFRegression', 'PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']
+tasks = ['PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF'] 
 
 # Training configuration
 # Learning rate to use
@@ -50,12 +51,21 @@ for datasetName in datasetNames:
         elif model == 'GraphUNet':
             num_layers = 2
             num_layers_name = 'depth'
+        elif model == 'MLP':
+            hidden_features = 128
+
         for task in tasks:
             # Number of input features to use
             if task == 'AtomClassification':
                 input_features = 3
             elif task == 'PositionRegression':
                 input_features = 4
+            elif task == 'PositionRegressionSAXS':
+                input_features = 300
+            elif task == 'PositionRegressionXRD':
+                input_features = 580
+            elif task == 'PositionRegressionxPDF':
+                input_features = 6000
             else:
                 input_features = 7
 
@@ -64,6 +74,8 @@ for datasetName in datasetNames:
                 output_features = 118
             elif task == 'PositionRegression':
                 output_features = 3
+            elif task in ['PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']:
+                output_features = 3 * 50 # MAX SIZE
             else:
                 output_features = 64
             # Create config

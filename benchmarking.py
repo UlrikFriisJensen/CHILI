@@ -18,6 +18,27 @@ import os
 
 warnings.simplefilter(action='ignore')
 
+# Simple MLP model
+class SimpleMLP(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size, device):
+        super(SimpleMLP, self).__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        self.device = device
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, output_size)
+
+    def forward(self, x, batch):
+        batch_size = max(batch) + 1
+
+        out = torch.zeros(batch_size, self.output_size).to(device=self.device)
+        for i, xi in enumerate(unbatch(x, batch)):
+            xi = F.relu(self.fc1(xi))
+            xi = self.fc2(xi)
+            out[i] = xi
+        return out # (B, X+Y+Z)
+
 # Define position mean absolute error function
 def position_MAE(pred_xyz, true_xyz):
     '''
@@ -82,6 +103,8 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
         model = GraphUNet(**config_dict['Model_config']).to(device)
     elif config_dict['model'] == 'PMLP':
         model = PMLP(**config_dict['Model_config']).to(device)
+    elif config_dict['model'] == 'MLP':
+        model = SimpleMLP(**config_dixt['Model_config']).to(device)
     else:
         raise ValueError('Model not supported')
 
@@ -138,6 +161,15 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
         else:
             def forward_pass(data):
                 return model.forward(x=torch.cat((data.x, data.pos_abs),dim=1), edge_index=data.edge_index, batch=data.batch)
+    elif config_dict['task'] == 'PositionRegressionSAXS':
+        def forward_pass(data):
+            return model.forward(x=data.y['saxs'], batch=data.batch)
+    elif config_dict['task'] == 'PositionRegressionXRD':
+        def forward_pass(data):
+            return model.forward(x=data.y['xrd'], batch=data.batch)
+    elif config_dict['task'] == 'PositionRegressionxPDF':
+        def forward_pass(data):
+            return model.forward(x=data.y['xPDF'], batch=data.batch)
     else:
         raise NotImplementedError
 
@@ -160,6 +192,9 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
         n_classes = 1
         criterion = torch.nn.SmoothL1Loss()
         metric = torch.nn.MSELoss()
+    elif config_dict['task'] in ['PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']:
+        criterion = torch.nn.SmoothL1Loss()
+        metric = torch.nn.L1Loss() # MAE
     else:
         raise NotImplementedError
     
@@ -221,6 +256,26 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 out = forward_pass(data)
                 out = torch.sum(out[data.edge_index[0,:]]*out[data.edge_index[1,:]], dim=-1)
                 ground_truth = data.edge_attr
+            elif config_dict['task'] in ['PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']:
+                # Get prediction
+                out = forward_pass(data) # (B, X+Y+Z)
+                # Get ground truth by sorting and padding
+                ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], 3 * config_dict['Model_config']['output_features']).to(device=device)
+                for i, x in enumerate(unbatch(data.x, data.batch)):
+                    # Sort according to norm
+                    norms = torch.norm(x, p=2, dim=-1)
+                    _, indices = torch.sort(norms, descending=False, dim=0)
+                    x = x[indices]
+
+                    # Pad 
+                    padding_size = config_dict['Model_config']['output_features'] - x.size(0)
+                    if padding_size > 0:
+                        padding = torch.full((padding_size, x.size(1)), 100, dtype=x.dtype)
+                        x = torch.cat([x, padding], dim=0)
+
+                    # Append
+                    ground_truth[i] = x.T.flatten()
+
             loss = criterion(out, ground_truth)
             loss.backward()
             optimizer.step()
@@ -279,6 +334,27 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     out = torch.sum(out[data.edge_index[0,:]]*out[data.edge_index[1,:]], dim=-1)
                     ground_truth = data.edge_attr   
                     error += metric(out, ground_truth) 
+                elif config_dict['task'] in ['PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']:
+                    # Get prediction
+                    out = forward_pass(data) # (B, X+Y+Z)
+                    # Get ground truth by sorting and padding
+                    ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], 3 * config_dict['Model_config']['output_features']).to(device=device)
+                    for i, x in enumerate(unbatch(data.x, data.batch)):
+                        # Sort according to norm
+                        norms = torch.norm(x, p=2, dim=-1)
+                        _, indices = torch.sort(norms, descending=False, dim=0)
+                        x = x[indices]
+
+                        # Pad 
+                        padding_size = config_dict['Model_config']['output_features'] - x.size(0)
+                        if padding_size > 0:
+                            padding = torch.full((padding_size, x.size(1)), 100, dtype=x.dtype)
+                            x = torch.cat([x, padding], dim=0)
+
+                        # Append
+                        ground_truth[i] = x.T.flatten()
+
+                    error += metric(out, ground_truth)
         
         # Log training progress
         writer.add_scalar('Loss/train', train_loss, epoch)
@@ -414,6 +490,27 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 out = torch.sum(out[data.edge_index[0,:]]*out[data.edge_index[1,:]], dim=-1)
                 ground_truth = data.edge_attr   
                 error += metric(out, ground_truth)   
+            elif config_dict['task'] in ['PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']:
+                # Get prediction
+                out = forward_pass(data) # (B, X+Y+Z)
+                # Get ground truth by sorting and padding
+                ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], 3 * config_dict['Model_config']['output_features']).to(device=device)
+                for i, x in enumerate(unbatch(data.x, data.batch)):
+                    # Sort according to norm
+                    norms = torch.norm(x, p=2, dim=-1)
+                    _, indices = torch.sort(norms, descending=False, dim=0)
+                    x = x[indices]
+
+                    # Pad 
+                    padding_size = config_dict['Model_config']['output_features'] - x.size(0)
+                    if padding_size > 0:
+                        padding = torch.full((padding_size, x.size(1)), 100, dtype=x.dtype)
+                        x = torch.cat([x, padding], dim=0)
+
+                    # Append
+                    ground_truth[i] = x.T.flatten()
+
+                error += metric(out, ground_truth)
 
     if 'Classification' in config_dict['task']:
         test_error = torch.tensor(0)
@@ -426,6 +523,18 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
         test_f1 = 0
         test_error = error / len(test_loader)
         if 'PositionRegression' in config_dict['task']:
+            writer.add_scalar('posMAE/test', test_error, epoch)
+
+            print(f'Test position MAE: {test_error:.4f}', flush=True)
+        elif 'PositionRegressionSAXS' in config_dict['task']:
+            writer.add_scalar('posMAE/test', test_error, epoch)
+
+            print(f'Test position MAE: {test_error:.4f}', flush=True)
+        elif 'PositionRegressionXRD' in config_dict['task']:
+            writer.add_scalar('posMAE/test', test_error, epoch)
+
+            print(f'Test position MAE: {test_error:.4f}', flush=True)
+        elif 'PositionRegressionxPDF' in config_dict['task']:
             writer.add_scalar('posMAE/test', test_error, epoch)
 
             print(f'Test position MAE: {test_error:.4f}', flush=True)
