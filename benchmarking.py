@@ -2,6 +2,9 @@
 import argparse
 import torch
 import torch.nn.functional as F
+import torch.nn as nn
+from torch.utils.data import Subset
+from torch_geometric.utils import unbatch
 from torch_geometric.loader import DataLoader
 from Code.datasetClass import InOrgMatDatasets
 from torch_geometric.nn.models import GCN, GraphSAGE, GIN, GAT, EdgeCNN, GraphUNet, PMLP
@@ -20,24 +23,26 @@ warnings.simplefilter(action='ignore')
 
 # Simple MLP model
 class SimpleMLP(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, device):
+    def __init__(self, in_channels, hidden_channels, out_channels, device, num_layers):
         super(SimpleMLP, self).__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.output_size = output_size
+
+        self.num_layers = num_layers
+        self.in_channels = in_channels
+        self.hidden_channels = hidden_channels
+        self.out_channels = out_channels
         self.device = device
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, output_size)
+
+        self.layers = nn.ModuleList() 
+        self.layers.append(nn.Linear(in_channels, hidden_channels))
+        for _ in range(num_layers-2):
+            self.layers.append(nn.Linear(hidden_channels, hidden_channels))
+        self.layers.append(nn.Linear(hidden_channels, out_channels))
 
     def forward(self, x, batch):
-        batch_size = max(batch) + 1
-
-        out = torch.zeros(batch_size, self.output_size).to(device=self.device)
-        for i, xi in enumerate(unbatch(x, batch)):
-            xi = F.relu(self.fc1(xi))
-            xi = self.fc2(xi)
-            out[i] = xi
-        return out # (B, X+Y+Z)
+        for i in range(len(self.layers)-1):
+            x = F.relu(self.layers[i](x))
+        x = self.layers[-1](x)
+        return x
 
 # Define position mean absolute error function
 def position_MAE(pred_xyz, true_xyz):
@@ -68,7 +73,37 @@ try:
     dataset.load_data_split(split_strategy='random')
 except FileNotFoundError:
     dataset.create_data_split(split_strategy='random', test_size=0.1)
-    dataset.load_data_split(split_strategy='random')    
+    dataset.load_data_split(split_strategy='random')
+
+# Filter
+if config_dict['model'] == 'MLP':
+    
+    # Train set
+    filtered_idx = []
+    for idx in dataset.train_set.indices:
+        data = dataset[idx]
+        if len(data.pos_abs) <= config_dict['Model_config']['out_channels']//3:
+            filtered_idx.append(idx)
+        
+    dataset.train_set = Subset(dataset, filtered_idx)
+    
+    # Validation set
+    filtered_idx = []
+    for idx in dataset.validation_set.indices:
+        data = dataset[idx]
+        if len(data.pos_abs) <= config_dict['Model_config']['out_channels']//3:
+            filtered_idx.append(idx)
+        
+    dataset.validation_set = Subset(dataset, filtered_idx)
+    
+    # Test set
+    filtered_idx = []
+    for idx in dataset.test_set.indices:
+        data = dataset[idx]
+        if len(data.pos_abs) <= config_dict['Model_config']['out_channels']//3:
+            filtered_idx.append(idx)
+        
+    dataset.test_set = Subset(dataset, filtered_idx)
     
 # Create dataframe for saving results
 results_df = pd.DataFrame(columns=['Model', 'Dataset', 'Task', 'Seed', 'Train samples', 'Val samples', 'Test samples', 'Train time', 'Trainable parameters', 'Train loss', 'Val F1-score', 'Test F1-score', 'Val posMAE/MSE', 'Test posMAE/MSE'])
@@ -104,7 +139,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
     elif config_dict['model'] == 'PMLP':
         model = PMLP(**config_dict['Model_config']).to(device)
     elif config_dict['model'] == 'MLP':
-        model = SimpleMLP(**config_dixt['Model_config']).to(device)
+        model = SimpleMLP(**config_dict['Model_config'], device=device).to(device)
     else:
         raise ValueError('Model not supported')
 
@@ -163,13 +198,13 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 return model.forward(x=torch.cat((data.x, data.pos_abs),dim=1), edge_index=data.edge_index, batch=data.batch)
     elif config_dict['task'] == 'PositionRegressionSAXS':
         def forward_pass(data):
-            return model.forward(x=data.y['saxs'], batch=data.batch)
+            return model.forward(x=data.y['saxs'][1,:], batch=data.batch)
     elif config_dict['task'] == 'PositionRegressionXRD':
         def forward_pass(data):
-            return model.forward(x=data.y['xrd'], batch=data.batch)
+            return model.forward(x=data.y['xrd'][1,:], batch=data.batch)
     elif config_dict['task'] == 'PositionRegressionxPDF':
         def forward_pass(data):
-            return model.forward(x=data.y['xPDF'], batch=data.batch)
+            return model.forward(x=data.y['xPDF'][1,:], batch=data.batch)
     else:
         raise NotImplementedError
 
@@ -193,6 +228,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
         criterion = torch.nn.SmoothL1Loss()
         metric = torch.nn.MSELoss()
     elif config_dict['task'] in ['PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']:
+        n_classes = 1
         criterion = torch.nn.SmoothL1Loss()
         metric = torch.nn.L1Loss() # MAE
     else:
@@ -260,17 +296,17 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 # Get prediction
                 out = forward_pass(data) # (B, X+Y+Z)
                 # Get ground truth by sorting and padding
-                ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], 3 * config_dict['Model_config']['output_features']).to(device=device)
-                for i, x in enumerate(unbatch(data.x, data.batch)):
+                ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], config_dict['Model_config']['out_channels']).to(device=device)
+                for i, x in enumerate(unbatch(data.pos_abs, data.batch)):
                     # Sort according to norm
                     norms = torch.norm(x, p=2, dim=-1)
                     _, indices = torch.sort(norms, descending=False, dim=0)
                     x = x[indices]
 
                     # Pad 
-                    padding_size = config_dict['Model_config']['output_features'] - x.size(0)
+                    padding_size = config_dict['Model_config']['out_channels']//3 - x.size(0)
                     if padding_size > 0:
-                        padding = torch.full((padding_size, x.size(1)), 100, dtype=x.dtype)
+                        padding = torch.full((padding_size, x.size(1)), 100, dtype=x.dtype).to(device=device)
                         x = torch.cat([x, padding], dim=0)
 
                     # Append
@@ -338,17 +374,17 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     # Get prediction
                     out = forward_pass(data) # (B, X+Y+Z)
                     # Get ground truth by sorting and padding
-                    ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], 3 * config_dict['Model_config']['output_features']).to(device=device)
-                    for i, x in enumerate(unbatch(data.x, data.batch)):
+                    ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], config_dict['Model_config']['out_channels']).to(device=device)
+                    for i, x in enumerate(unbatch(data.pos_abs, data.batch)):
                         # Sort according to norm
                         norms = torch.norm(x, p=2, dim=-1)
                         _, indices = torch.sort(norms, descending=False, dim=0)
                         x = x[indices]
 
                         # Pad 
-                        padding_size = config_dict['Model_config']['output_features'] - x.size(0)
+                        padding_size = config_dict['Model_config']['out_channels']//3 - x.size(0)
                         if padding_size > 0:
-                            padding = torch.full((padding_size, x.size(1)), 100, dtype=x.dtype)
+                            padding = torch.full((padding_size, x.size(1)), 100, dtype=x.dtype).to(device=device)
                             x = torch.cat([x, padding], dim=0)
 
                         # Append
@@ -494,17 +530,17 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 # Get prediction
                 out = forward_pass(data) # (B, X+Y+Z)
                 # Get ground truth by sorting and padding
-                ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], 3 * config_dict['Model_config']['output_features']).to(device=device)
-                for i, x in enumerate(unbatch(data.x, data.batch)):
+                ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], config_dict['Model_config']['out_channels']).to(device=device)
+                for i, x in enumerate(unbatch(data.pos_abs, data.batch)):
                     # Sort according to norm
                     norms = torch.norm(x, p=2, dim=-1)
                     _, indices = torch.sort(norms, descending=False, dim=0)
                     x = x[indices]
 
                     # Pad 
-                    padding_size = config_dict['Model_config']['output_features'] - x.size(0)
+                    padding_size = config_dict['Model_config']['out_channels']//3 - x.size(0)
                     if padding_size > 0:
-                        padding = torch.full((padding_size, x.size(1)), 100, dtype=x.dtype)
+                        padding = torch.full((padding_size, x.size(1)), 100, dtype=x.dtype).to(device=device)
                         x = torch.cat([x, padding], dim=0)
 
                     # Append

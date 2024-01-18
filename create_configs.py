@@ -52,6 +52,7 @@ for datasetName in datasetNames:
             num_layers = 2
             num_layers_name = 'depth'
         elif model == 'MLP':
+            num_layers = 4
             hidden_features = 128
 
         for task in tasks:
@@ -75,7 +76,7 @@ for datasetName in datasetNames:
             elif task == 'PositionRegression':
                 output_features = 3
             elif task in ['PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']:
-                output_features = 3 * 50 # MAX SIZE
+                output_features = 3 * 200 # MAX SIZE
             else:
                 output_features = 64
             # Create config
@@ -101,6 +102,7 @@ for datasetName in datasetNames:
                     'max_patience': max_patience,
                 }
             }
+
             # Create config file path
             configPath = Path(f'./benchmark_configs/config_{datasetName}_{task}_{model}.yaml')
             # Create config file
