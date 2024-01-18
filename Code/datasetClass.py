@@ -221,12 +221,12 @@ class InOrgMatDatasets(Dataset):
             elif n_samples_per_class == 'even':
                 # Find the class with the least number of samples
                 min_samples = df_stats[stratify_on].value_counts().min()
-                print(f'Minimum number of samples per class: {min_samples}')
+                # Find the number of classes
+                n_classes = df_stats[stratify_on].nunique()
                 # Find the number of samples to use for train, validation and test sets
-                n_test = int(min_samples*test_size)
-                n_validation = int((min_samples-n_test)*validation_size/(1-test_size))
-                n_train = min_samples-n_test-n_validation
-                print(f'Number of samples per class: {n_train} train, {n_validation} validation, {n_test} test')
+                n_test = int(min_samples*n_classes*test_size)
+                n_validation = int((min_samples*n_classes-n_test)*validation_size/(1-test_size))
+                n_train = min_samples*n_classes-n_test-n_validation
                 # Split data into train, validation and test sets
                 train_idx, test_idx = train_test_split(np.arange(self.len()), train_size=n_train+n_validation, test_size=n_test, random_state=random_state, stratify=df_stats[stratify_on])
                 train_idx, validation_idx = train_test_split(train_idx, train_size=n_train, test_size=n_validation, random_state=random_state, stratify=df_stats.loc[train_idx][stratify_on])
@@ -242,10 +242,12 @@ class InOrgMatDatasets(Dataset):
                 df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, Even classes)'].loc[validation_idx] = 'Validation'
                 df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, Even classes)'].loc[test_idx] = 'Test'
             elif isinstance(n_samples_per_class, int):
+                # Find the number of classes
+                n_classes = df_stats[stratify_on].nunique()
                 # Find the number of samples to use for train, validation and test sets
-                n_test = int(n_samples_per_class*test_size)
-                n_validation = int((n_samples_per_class-n_test)*validation_size/(1-test_size))
-                n_train = n_samples_per_class-n_test-n_validation
+                n_test = int(n_classes*n_samples_per_class*test_size)
+                n_validation = int((n_classes*n_samples_per_class-n_test)*validation_size/(1-test_size))
+                n_train = n_classes*n_samples_per_class-n_test-n_validation
                 
                 # Split data into train, validation and test sets
                 train_idx, test_idx = train_test_split(np.arange(self.len()), train_size=n_train+n_validation, test_size=n_test, random_state=random_state, stratify=df_stats[stratify_on])
