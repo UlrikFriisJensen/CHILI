@@ -176,7 +176,7 @@ class InOrgMatDatasets(Dataset):
             raise ValueError('Split not recognized. Please use either "train", "validation" or "test"')
         return data
     
-    def create_data_split(self, test_size=0.1, validation_size=None, split_strategy='random', stratify_on='Space group (Number)', n_samples_per_class='max', random_state=42, return_idx=False):
+    def create_data_split(self, test_size=0.1, validation_size=None, split_strategy='random', stratify_on='Space group (Number)', stratify_distribution='match', random_state=42, return_idx=False):
         '''
         Split the dataset into train, validation and test sets. The indices of the split are saved to csv files in the processed directory.
         '''
@@ -203,7 +203,7 @@ class InOrgMatDatasets(Dataset):
             df_stats[f'{split_strategy.capitalize()} data split'].loc[test_idx] = 'Test'
 
         elif split_strategy == 'stratified':
-            if n_samples_per_class == 'max':
+            if stratify_distribution == 'match':
                 # Split data into train, validation and test sets
                 train_idx, test_idx = train_test_split(np.arange(self.len()), test_size=test_size, random_state=random_state, stratify=df_stats[stratify_on])
                 train_idx, validation_idx = train_test_split(train_idx, test_size=validation_size/(1-test_size), random_state=random_state, stratify=df_stats.loc[train_idx][stratify_on])
@@ -218,53 +218,35 @@ class InOrgMatDatasets(Dataset):
                 df_stats[f'{split_strategy.capitalize()} data split ({stratify_on})'].loc[train_idx] = 'Train'
                 df_stats[f'{split_strategy.capitalize()} data split ({stratify_on})'].loc[validation_idx] = 'Validation'
                 df_stats[f'{split_strategy.capitalize()} data split ({stratify_on})'].loc[test_idx] = 'Test'   
-            elif n_samples_per_class == 'even':
+            elif stratify_distribution == 'equal':
                 # Find the class with the least number of samples
                 min_samples = df_stats[stratify_on].value_counts().min()
-                # Find the number of classes
-                n_classes = df_stats[stratify_on].nunique()
+                # Randomly sample the same number of samples from each class
+                subset_idx = []
+                for group in df_stats[stratify_on].unique():
+                    subset_idx += list(df_stats[df_stats[stratify_on] == group].sample(min_samples, random_state=random_state).index)
+                # Find the total number of samples
+                n_samples = len(subset_idx)
                 # Find the number of samples to use for train, validation and test sets
-                n_test = int(min_samples*n_classes*test_size)
-                n_validation = int((min_samples*n_classes-n_test)*validation_size/(1-test_size))
-                n_train = min_samples*n_classes-n_test-n_validation
+                n_test = int(n_samples*test_size)
+                n_validation = int((n_samples-n_test)*validation_size/(1-test_size))
+                n_train = n_samples-n_test-n_validation
                 # Split data into train, validation and test sets
-                train_idx, test_idx = train_test_split(np.arange(self.len()), train_size=n_train+n_validation, test_size=n_test, random_state=random_state, stratify=df_stats[stratify_on])
+                train_idx, test_idx = train_test_split(subset_idx, train_size=n_train+n_validation, test_size=n_test, random_state=random_state, stratify=df_stats.loc[subset_idx][stratify_on])
                 train_idx, validation_idx = train_test_split(train_idx, train_size=n_train, test_size=n_validation, random_state=random_state, stratify=df_stats.loc[train_idx][stratify_on])
                 
                 # Save indices to csv files
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{n_samples_per_class}_train.csv'), train_idx, delimiter=',', fmt='%i')
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{n_samples_per_class}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{n_samples_per_class}_test.csv'), test_idx, delimiter=',', fmt='%i')
+                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_train.csv'), train_idx, delimiter=',', fmt='%i')
+                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
+                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_test.csv'), test_idx, delimiter=',', fmt='%i')
                 
                 # Update statistics dataframe
-                df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, Even classes)'] = ''
-                df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, Even classes)'].loc[train_idx] = 'Train'
-                df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, Even classes)'].loc[validation_idx] = 'Validation'
-                df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, Even classes)'].loc[test_idx] = 'Test'
-            elif isinstance(n_samples_per_class, int):
-                # Find the number of classes
-                n_classes = df_stats[stratify_on].nunique()
-                # Find the number of samples to use for train, validation and test sets
-                n_test = int(n_classes*n_samples_per_class*test_size)
-                n_validation = int((n_classes*n_samples_per_class-n_test)*validation_size/(1-test_size))
-                n_train = n_classes*n_samples_per_class-n_test-n_validation
-                
-                # Split data into train, validation and test sets
-                train_idx, test_idx = train_test_split(np.arange(self.len()), train_size=n_train+n_validation, test_size=n_test, random_state=random_state, stratify=df_stats[stratify_on])
-                train_idx, validation_idx = train_test_split(train_idx, train_size=n_train, test_size=n_validation, random_state=random_state, stratify=df_stats.loc[train_idx][stratify_on])
-                
-                # Save indices to csv files
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{n_samples_per_class}_train.csv'), train_idx, delimiter=',', fmt='%i')
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{n_samples_per_class}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{n_samples_per_class}_test.csv'), test_idx, delimiter=',', fmt='%i')
-                
-                # Update statistics dataframe
-                df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, {n_samples_per_class} samples per class)'] = ''
-                df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, {n_samples_per_class} samples per class)'].loc[train_idx] = 'Train'
-                df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, {n_samples_per_class} samples per class)'].loc[validation_idx] = 'Validation'
-                df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, {n_samples_per_class} samples per class)'].loc[test_idx] = 'Test'
+                df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, Equal classes)'] = ''
+                df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, Equal classes)'].loc[train_idx] = 'Train'
+                df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, Equal classes)'].loc[validation_idx] = 'Validation'
+                df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, Equal classes)'].loc[test_idx] = 'Test'
             else:
-                raise ValueError('Number of samples per class not recognized. Please use either "max", "even" or an integer')
+                raise ValueError('Stratify distribution not recognized. Please use either "match" or "equal"')
         else:
             # Raise error if split strategy is not recognized
             raise ValueError('Split strategy not recognized. Please use either "random" or "stratified"')
@@ -277,7 +259,7 @@ class InOrgMatDatasets(Dataset):
         else:
             return None
         
-    def load_data_split(self, split_strategy='random', stratify_on='Space group (Number)', n_samples_per_class='max'):
+    def load_data_split(self, split_strategy='random', stratify_on='Space group (Number)', stratify_distribution='match'):
         '''
         Load the indices of the train, validation and test sets from csv files in the processed directory.
         '''
@@ -292,16 +274,16 @@ class InOrgMatDatasets(Dataset):
             self.validation_set = Subset(self, validation_idx)
             self.test_set = Subset(self, test_idx)
         elif split_strategy == 'stratified':
-            if n_samples_per_class == 'max':
+            if stratify_distribution == 'match':
                 # Load indices from csv files
                 train_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_train.csv'), delimiter=',', dtype=int)
                 validation_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_validation.csv'), delimiter=',', dtype=int)
                 test_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_test.csv'), delimiter=',', dtype=int)
-            elif n_samples_per_class == 'even' or isinstance(n_samples_per_class, int):
+            elif stratify_distribution == 'equal':
                 # Load indices from csv files
-                train_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{n_samples_per_class}_train.csv'), delimiter=',', dtype=int)
-                validation_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{n_samples_per_class}_validation.csv'), delimiter=',', dtype=int)
-                test_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{n_samples_per_class}_test.csv'), delimiter=',', dtype=int)
+                train_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_train.csv'), delimiter=',', dtype=int)
+                validation_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_validation.csv'), delimiter=',', dtype=int)
+                test_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_test.csv'), delimiter=',', dtype=int)
                 
             # Split the dataset into train, validation and test sets
             self.train_set = Subset(self, train_idx)
