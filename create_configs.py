@@ -3,15 +3,14 @@ from pathlib import Path
 
 # Top level configuration
 # Models to test
-models = ['MLP']#['GCN', 'GAT', 'GIN', 'GraphSAGE', 'EdgeCNN', 'GraphUNet', 'PMLP', 'MLP']
+models = ['GCN', 'GAT', 'GIN', 'GraphSAGE', 'EdgeCNN', 'GraphUNet', 'PMLP', 'MLP']
 # Path to datasets
 datasetRoot = './Dataset/'
 datasetNames = ['Simulated_rmax60_v4']#, 'COD_subset_v4']
 # Directory to save results in
 saveDir = './Results/'
 # tasks to test
-#tasks = ['AtomClassification', 'PositionRegression', 'DistanceRegression', 'CrystalSystemClassification', 'SpacegroupClassification', 'SAXSRegression', 'XRDRegression', 'xPDFRegression', 'PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']
-tasks = ['PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF'] 
+tasks = ['AtomClassification', 'PositionRegression', 'DistanceRegression', 'CrystalSystemClassification', 'SpacegroupClassification', 'SAXSRegression', 'XRDRegression', 'xPDFRegression', 'PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']
 
 # Training configuration
 # Learning rate to use
