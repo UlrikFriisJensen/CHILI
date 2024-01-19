@@ -168,3 +168,4 @@ Dataset/CIFs/COD*/
 Dataset/*/
 test*.*
 Results/*
+benchmark_configs/*
