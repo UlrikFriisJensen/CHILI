@@ -169,3 +169,5 @@ Dataset/*/
 test*.*
 Results/*
 benchmark_configs/*
+array*
+Results*/

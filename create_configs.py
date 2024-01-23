@@ -3,14 +3,21 @@ from pathlib import Path
 
 # Top level configuration
 # Models to test
-models = ['GCN', 'GAT', 'GIN', 'GraphSAGE', 'EdgeCNN', 'GraphUNet', 'PMLP', 'MLP']
+models = ['GCN', 'GAT', 'GIN', 'GraphSAGE', 'EdgeCNN', 'GraphUNet', 'PMLP']#, 'MLP']
+models = ['EdgeCNN']
+#models = ['GCN']
+#models = ['MLP']
 # Path to datasets
 datasetRoot = './Dataset/'
-datasetNames = ['Simulated_rmax60_v4']#, 'COD_subset_v4']
+#datasetNames = ['Simulated_rmax60_v4', 'COD_subset_v4']
+datasetNames = ['Simulated_rmax60_v4']
+datasetNames = ['COD_subset_v4']
 # Directory to save results in
-saveDir = './Results/'
+saveDir = './Results_COD_TEST/'
 # tasks to test
 tasks = ['AtomClassification', 'PositionRegression', 'DistanceRegression', 'CrystalSystemClassification', 'SpacegroupClassification', 'SAXSRegression', 'XRDRegression', 'xPDFRegression', 'PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']
+tasks = ['SpacegroupClassification', 'XRDRegression', 'xPDFRegression', 'SAXSRegression']
+tasks = ['AtomClassification']
 
 # Training configuration
 # Learning rate to use
@@ -24,13 +31,15 @@ train_time = 3600 # 3600 seconds = 1 hour
 # Seeds to use
 seeds = [42, 43, 44]
 # Patience
-max_patience = 5
+max_patience = 10
 # save latest model
 save_latest_model = False
 
+config_folder = 'benchmark_config_COD'
+
 # Create save directory if it doesn't exist
-if not Path('./benchmark_configs').exists():
-    Path('./benchmark_configs').mkdir()
+if not Path(config_folder).exists():
+    Path(config_folder).mkdir()
 
 # Create config files
 for datasetName in datasetNames:
@@ -52,7 +61,7 @@ for datasetName in datasetNames:
             num_layers_name = 'depth'
         elif model == 'MLP':
             num_layers = 4
-            hidden_features = 128
+            hidden_features = 512
 
         for task in tasks:
             # Number of input features to use
@@ -78,6 +87,22 @@ for datasetName in datasetNames:
                 output_features = 3 * 200 # MAX SIZE
             else:
                 output_features = 64
+            
+            # Secondary FF models
+            if task == 'SpacegroupClassification':
+                sec_output_features = 230
+            elif task == 'CrystalSystemClassification':
+                sec_output_features = 7
+            elif task == 'SAXSRegression':
+                sec_output_features = 300
+            elif task == 'XRDRegression':
+                sec_output_features = 580
+            elif task == 'xPDFRegression':
+                sec_output_features = 6000
+            else:
+                sec_output_features = 1
+
+            sec_hidden_features = (output_features + sec_output_features) // 2
             # Create config
             config = {
                 'dataset': datasetName,
@@ -92,6 +117,11 @@ for datasetName in datasetNames:
                     'hidden_channels': hidden_features,
                     'out_channels': output_features,
                 },
+                'Secondary_config': {
+                    'in_channels': output_features * 3,
+                    'hidden_channels': sec_hidden_features,
+                    'out_channels': sec_output_features,
+                },
                 'Train_config': {
                     'learning_rate': learning_rate,
                     'batch_size': batch_size,
@@ -103,7 +133,7 @@ for datasetName in datasetNames:
             }
 
             # Create config file path
-            configPath = Path(f'./benchmark_configs/config_{datasetName}_{task}_{model}.yaml')
+            configPath = Path(f'./{config_folder}/config_{datasetName}_{task}_{model}.yaml')
             # Create config file
             with open(configPath, 'w') as file:
                 documents = yaml.dump(config, file)
