@@ -161,13 +161,9 @@ cython_debug/
 
 # Project specific
 *.code-workspace
-Dataset/DatasetTest/
-Dataset/h5/
-Dataset/CIFs/ICSD*/
-Dataset/CIFs/COD*/
-Dataset/*/
-test*.*
-Results/*
-benchmark_configs/*
-array*
-Results*/
+
+benchmark/configs/ # Config files
+
+**/*.out # Slurm log files
+**/results/ # Any result files
+**/dataset/ # Any dataset files
