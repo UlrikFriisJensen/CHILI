@@ -164,6 +164,12 @@ cython_debug/
 
 benchmark/configs/ # Config files
 
-**/*.out # Slurm log files
-**/results/ # Any result files
-**/dataset/ # Any dataset files
+**/*.out
+**/*.sh
+benchmark/dataset/
+benchmark/results*/
+benchmark/configs/
+generation/generated_data/
+generation/*_batches/
+
+
