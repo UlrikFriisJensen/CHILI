@@ -1,25 +1,31 @@
 # Import libraries
+import os
+import yaml
+import warnings
+import time
 import argparse
+
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
 from torch.utils.data import Subset
+from torch.utils.tensorboard import SummaryWriter
+
 from torch_geometric.utils import unbatch
 from torch_geometric.loader import DataLoader
-from Code.datasetClass import InOrgMatDatasets
 from torch_geometric.nn.models import GCN, GraphSAGE, GIN, GAT, EdgeCNN, GraphUNet, PMLP
 from torch_geometric.nn import global_mean_pool, Linear, global_add_pool, global_max_pool
-from torch.utils.tensorboard import SummaryWriter
-import yaml
-import warnings
-import time
-import pandas as pd
 from torch_geometric.seed import seed_everything
+
 from torcheval.metrics import MulticlassF1Score
+
+import pandas as pd
 from glob import glob
-import os
 from tqdm.auto import tqdm
 
+from dataset_class import InOrgMatDatasets
+
+# Ignore warnings
 warnings.simplefilter(action='ignore')
 
 # Simple MLP model
@@ -90,28 +96,32 @@ with open(config_path, 'r') as file:
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Define your dataset
-dataset = InOrgMatDatasets(dataset=config_dict['dataset'], root=config_dict['root'])
+dataset = InOrgMatDatasets(root=config_dict['root'], dataset=config_dict['dataset'])
 
+# Load / Create data split
+if config_dict['Data_config']['split_strategy'] == 'random':
+    test_size = 0.1
 try:
     dataset.load_data_split(
         split_strategy = config_dict['Data_config']['split_strategy'],
         stratify_on = config_dict['Data_config']['stratify_on'],
-        stratify_distribution = config['Data_config']['stratify_distribtion']
+        stratify_distribution = config_dict['Data_config']['stratify_distribution'],
     )
 except FileNotFoundError:
     dataset.create_data_split(
         split_strategy = config_dict['Data_config']['split_strategy'],
         stratify_on = config_dict['Data_config']['stratify_on'],
-        stratify_distribution = config['Data_config']['stratify_distribtion']
+        stratify_distribution = config_dict['Data_config']['stratify_distribution'],
+        test_size = 0.1,
     )
     dataset.load_data_split(
         split_strategy = config_dict['Data_config']['split_strategy'],
         stratify_on = config_dict['Data_config']['stratify_on'],
-        stratify_distribution = config['Data_config']['stratify_distribtion']
+        stratify_distribution = config_dict['Data_config']['stratify_distribution']
     )
 
-# Filter
-if config_dict['model'] == 'MLP':
+# Filter on number of atoms if the task is PositionRegression from Signal
+if config_dict['task'] in ['AbsPositionRegressionxPDF', 'AbsPositionRegressionXRD', 'AbsPositionRegressionSAXS']:
     
     # Train set
     filtered_idx = []
@@ -136,6 +146,35 @@ if config_dict['model'] == 'MLP':
     for idx in dataset.test_set.indices:
         data = dataset[idx]
         if len(data.pos_abs) <= config_dict['Model_config']['out_channels']//3:
+            filtered_idx.append(idx)
+        
+    dataset.test_set = Subset(dataset, filtered_idx)
+
+if config_dict['task'] in ['UnitCellPositionRegressionxPDF', 'UnitCellPositionRegressionXRD', 'UnitCellPositionRegressionSAXS']:
+    
+    # Train set
+    filtered_idx = []
+    for idx in dataset.train_set.indices:
+        data = dataset[idx]
+        if len(data.y['unit_cell_pos_abs']) <= config_dict['Model_config']['out_channels']//3:
+            filtered_idx.append(idx)
+        
+    dataset.train_set = Subset(dataset, filtered_idx)
+    
+    # Validation set
+    filtered_idx = []
+    for idx in dataset.validation_set.indices:
+        data = dataset[idx]
+        if len(data.y['unit_cell_pos_abs']) <= config_dict['Model_config']['out_channels']//3:
+            filtered_idx.append(idx)
+        
+    dataset.validation_set = Subset(dataset, filtered_idx)
+    
+    # Test set
+    filtered_idx = []
+    for idx in dataset.test_set.indices:
+        data = dataset[idx]
+        if len(data.y['unit_cell_pos_abs']) <= config_dict['Model_config']['out_channels']//3:
             filtered_idx.append(idx)
         
     dataset.test_set = Subset(dataset, filtered_idx)
@@ -230,13 +269,13 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
         else:
             def forward_pass(data):
                 return model.forward(x=torch.cat((data.x, data.pos_abs),dim=1), edge_index=data.edge_index, batch=data.batch)
-    elif config_dict['task'] == 'PositionRegressionSAXS':
+    elif config_dict['task'] in ['AbsPositionRegressionSAXS', 'UnitCellPositionRegressionSAXS', 'CellParamsRegressionSAXS', 'CrystalSystemClassificationSAXS', 'SpacegroupClassificationSAXS']:
         def forward_pass(data):
             return model.forward(x=data.y['saxs'][1,:], batch=data.batch)
-    elif config_dict['task'] == 'PositionRegressionXRD':
+    elif config_dict['task'] in ['AbsPositionRegressionXRD', 'UnitCellPositionRegressionXRD', 'CellParamsRegressionXRD', 'CrystalSystemClassificationXRD', 'SpacegroupClassificationXRD']:
         def forward_pass(data):
             return model.forward(x=data.y['xrd'][1,:], batch=data.batch)
-    elif config_dict['task'] == 'PositionRegressionxPDF':
+    elif config_dict['task'] in ['AbsPositionRegressionxPDF', 'UnitCellPositionRegressionxPDF', 'CellParamsRegressionxPDF', 'CrystalSystemClassificationxPDF', 'SpacegroupClassificationxPDF']:
         def forward_pass(data):
             return model.forward(x=data.y['xPDF'][1,:], batch=data.batch)
     else:
@@ -270,17 +309,31 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
         metric = torch.nn.MSELoss()
     elif config_dict['task'] in ['SAXSRegression','XRDRegression', 'xPDFRegression']:
         n_classes = 1
-        criterion = nn.SmoothL1Loss()#rwp
-        metric = nn.MSELoss()#rwp
-    elif config_dict['task'] in ['PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']:
+        criterion = nn.SmoothL1Loss()
+        metric = nn.MSELoss()
+    elif config_dict['task'] in ['AbsPositionRegressionSAXS', 'AbsPositionRegressionXRD', 'AbsPositionRegressionxPDF']:
+        n_classes = 1
+        criterion = torch.nn.SmoothL1Loss(reduction='none')
+        metric = torch.nn.L1Loss(reduction='none') # MAE
+    elif config_dict['task'] in ['UnitCellPositionRegressionSAXS', 'UnitCellPositionRegressionXRD', 'UnitCellPositionRegressionxPDF']:
+        n_classes = 1
+        criterion = torch.nn.SmoothL1Loss(reduction='none')
+        metric = torch.nn.L1Loss(reduction='none') # MAE
+    elif config_dict['task'] in ['CellParamsRegressionSAXS', 'CellParamsRegressionXRD', 'CellParamsRegressionxPDF']:
         n_classes = 1
         criterion = torch.nn.SmoothL1Loss()
-        metric = torch.nn.L1Loss() # MAE
+        metric = torch.nn.MSELoss()
+    elif config_dict['task'] in ['CrystalSystemClassificationSAXS', 'CrystalSystemClassificationXRD', 'CrystalSystemClassificationxPDF']:
+        n_classes = 7
+        criterion = torch.nn.CrossEntropyLoss()
+    elif config_dict['task'] in ['SpacegroupClassificationSAXS', 'SpacegroupClassificationXRD', 'SpacegroupClassificationxPDF']:
+        n_classes = 230
+        criterion = torch.nn.CrossEntropyLoss()
     else:
         raise NotImplementedError
     
     # Define TensorBoard writer
-    save_dir = f"{config_dict['log_dir']}{config_dict['dataset']}/{config_dict['task']}/{config_dict['model']}/seed{seed}"
+    save_dir = f"{config_dict['log_dir']}/{config_dict['dataset']}/{config_dict['task']}/{config_dict['model']}/seed{seed}"
     writer = SummaryWriter(save_dir)
 
     # Set training time (in seconds)
@@ -306,42 +359,70 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
         # batches pbar
         batches_pbar = tqdm(desc='Traning epoch...', total = len(train_loader), disable=True)
         for data in train_loader:
-            batches_pbar.set_description('Sending to device', refresh=True)
+            # Send to device
             data = data.to(device)
             
-            batches_pbar.set_description('Forward pass', refresh=True)
             if config_dict['task'] == 'AtomClassification':
                 out = forward_pass(data)
                 ground_truth = data.x[:,0].long()
+                loss = criterion(out, ground_truth)
             elif config_dict['task'] == 'SpacegroupClassification':
                 out = forward_pass(data)
                 ground_truth = torch.tensor(data.y['space_group_number'], device=device)
+                loss = criterion(out, ground_truth)
             elif config_dict['task'] == 'CrystalSystemClassification':
                 out = forward_pass(data)
                 ground_truth = torch.tensor(data.y['crystal_system_number'], device=device)
+                loss = criterion(out, ground_truth)
             elif config_dict['task'] == 'PositionRegression':
                 out = forward_pass(data)
                 ground_truth = data.pos_abs
+                loss = criterion(out, ground_truth)
             elif config_dict['task'] == 'SAXSRegression':
                 out = forward_pass(data)
                 ground_truth = data.y['saxs'][1,:]
                 # Min-max normalize saxs data
                 ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
+                loss = criterion(out, ground_truth)
             elif config_dict['task'] == 'XRDRegression':
                 out = forward_pass(data)
                 ground_truth = data.y['xrd'][1,:]
                 # Min-max normalize xrd data
                 ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
+                loss = criterion(out, ground_truth)
             elif config_dict['task'] == 'xPDFRegression':
                 out = forward_pass(data)
                 ground_truth = data.y['xPDF'][1,:]
                 # Min-max normalize xpdf data
                 ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
+                loss = criterion(out, ground_truth)
             elif config_dict['task'] == 'DistanceRegression':
                 out = forward_pass(data)
                 out = torch.sum(out[data.edge_index[0,:]]*out[data.edge_index[1,:]], dim=-1)
                 ground_truth = data.edge_attr
-            elif config_dict['task'] in ['PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']:
+                loss = criterion(out, ground_truth)
+            elif config_dict['task'] in ['CellParamsRegressionSAXS', 'CellParamsRegressionXRD', 'CellParamsRegressionxPDF']:
+                # Get prediction
+                out = forward_pass(data)
+                # Get ground truth
+                ground_truth = data.y['cell_params']
+                # Calculate loss
+                loss = criterion(out, ground_truth)
+            elif config_dict['task'] in ['CrystalSystemClassificationSAXS','CrystalSystemClassificationXRD','CrystalSystemClassificationxPDF']:
+                # Get prediction
+                out = forward_pass(data)
+                # Get ground truth
+                ground_truth = data.y['crystal_system_number']
+                # Calculate loss
+                loss = criterion(out, ground_truth)
+            elif config_dict['task'] in ['SpacegroupClassificationSAXS','SpacegroupClassificationXRD','SpacegroupClassificationxPDF']:
+                # Get prediction
+                out = forward_pass(data)
+                # Get ground truth
+                ground_truth = data.y['space_group_number']
+                # Calculate loss
+                loss = criterion(out, ground_truth)
+            elif config_dict['task'] in ['AbsPositionRegressionSAXS', 'AbsPositionRegressionXRD', 'AbsPositionRegressionxPDF']:
                 # Get prediction
                 out = forward_pass(data) # (B, X+Y+Z)
                 # Get ground truth by sorting and padding
@@ -360,21 +441,42 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
 
                     # Append
                     ground_truth[i] = x.T.flatten()
+                    
+                    # mask out the padding
+                mask = ground_truth < 100
+                loss = criterion(out, ground_truth)[mask].mean(dim=-1)
+            elif config_dict['task'] in ['UnitCellPositionRegressionSAXS', 'UnitCellPositionRegressionXRD','UnitCellPositionRegressionxPDF']:
+                # Get prediction
+                out = forward_pass(data) # (B, X+Y+Z)
+                # Get ground truth by sorting and padding
+                ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], config_dict['Model_config']['out_channels']).to(device=device)
+                for i, x in enumerate(unbatch(data.y['unit_cell_pos_abs'], data.batch)):
+                    # Sort according to norm
+                    norms = torch.norm(x, p=2, dim=-1)
+                    _, indices = torch.sort(norms, descending=False, dim=0)
+                    x = x[indices]
 
-            batches_pbar.set_description('Calulating loss', refresh=True)
-            loss = criterion(out, ground_truth)
-            batches_pbar.set_description('Zeroing gradients', refresh=True)
+                    # Pad 
+                    padding_size = config_dict['Model_config']['out_channels']//3 - x.size(0)
+                    if padding_size > 0:
+                        padding = torch.full((padding_size, x.size(1)), 100, dtype=x.dtype).to(device=device)
+                        x = torch.cat([x, padding], dim=0)
+
+                    # Append
+                    ground_truth[i] = x.T.flatten()
+                    
+                    # mask out the padding
+                mask = ground_truth < 100
+                loss = criterion(out, ground_truth)[mask].mean(dim=-1)
+
             optimizer.zero_grad()
             loss.backward()
-            batches_pbar.set_description('Step', refresh=True)
             optimizer.step()
             total_loss += loss.item()
 
             batches_pbar.update(1)
 
         batches_pbar.close()
-
-        print('Finished training loop', flush=True)
 
         train_loss = total_loss / len(train_loader)
 
@@ -429,7 +531,28 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     out = torch.sum(out[data.edge_index[0,:]]*out[data.edge_index[1,:]], dim=-1)
                     ground_truth = data.edge_attr   
                     error += metric(out, ground_truth) 
-                elif config_dict['task'] in ['PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']:
+                elif config_dict['task'] in ['CellParamsRegressionSAXS', 'CellParamsRegressionXRD', 'CellParamsRegressionxPDF']:
+                    # Get prediction
+                    out = forward_pass(data)
+                    # Get ground truth
+                    ground_truth = data.y['cell_params']
+                    # Calculate loss
+                    error += metric(out, ground_truth) 
+                elif config_dict['task'] in ['CrystalSystemClassificationSAXS','CrystalSystemClassificationXRD','CrystalSystemClassificationxPDF']:
+                    # Get prediction
+                    out = forward_pass(data)
+                    # Get ground truth
+                    ground_truth = data.y['crystal_system_number']
+                    # Calculate loss
+                    error += metric(out, ground_truth) 
+                elif config_dict['task'] in ['SpacegroupClassificationSAXS','SpacegroupClassificationXRD','SpacegroupClassificationxPDF']:
+                    # Get prediction
+                    out = forward_pass(data)
+                    # Get ground truth
+                    ground_truth = data.y['space_group_number']
+                    # Calculate loss
+                    error += metric(out, ground_truth) 
+                elif config_dict['task'] in ['AbsPositionRegressionSAXS', 'AbsPositionRegressionXRD', 'AbsPositionRegressionxPDF']:
                     # Get prediction
                     out = forward_pass(data) # (B, X+Y+Z)
                     # Get ground truth by sorting and padding
@@ -449,10 +572,33 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                         # Append
                         ground_truth[i] = x.T.flatten()
 
-                    error += metric(out, ground_truth)
-        
-        print('Finished validation loop', flush=True)
+                    mask = ground_truth < 100
+                    error += metric(out, ground_truth)[mask].mean(dim=-1)
 
+                elif config_dict['task'] in ['UnitCellPositionRegressionSAXS', 'UnitCellPositionRegressionXRD','UnitCellPositionRegressionxPDF']:
+                    # Get prediction
+                    out = forward_pass(data) # (B, X+Y+Z)
+                    # Get ground truth by sorting and padding
+                    ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], config_dict['Model_config']['out_channels']).to(device=device)
+                    for i, x in enumerate(unbatch(data.y['unit_cell_pos_abs'], data.batch)):
+                        # Sort according to norm
+                        norms = torch.norm(x, p=2, dim=-1)
+                        _, indices = torch.sort(norms, descending=False, dim=0)
+                        x = x[indices]
+
+                        # Pad 
+                        padding_size = config_dict['Model_config']['out_channels']//3 - x.size(0)
+                        if padding_size > 0:
+                            padding = torch.full((padding_size, x.size(1)), 100, dtype=x.dtype).to(device=device)
+                            x = torch.cat([x, padding], dim=0)
+
+                        # Append
+                        ground_truth[i] = x.T.flatten()
+                        
+                        # mask out the padding
+                    mask = ground_truth < 100
+                    error += metric(out, ground_truth)[mask].mean(dim=-1)
+        
         # Log training progress
         writer.add_scalar('Loss/train', train_loss, epoch)
         
@@ -614,7 +760,28 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 out = torch.sum(out[data.edge_index[0,:]]*out[data.edge_index[1,:]], dim=-1)
                 ground_truth = data.edge_attr   
                 error += metric(out, ground_truth)   
-            elif config_dict['task'] in ['PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']:
+            elif config_dict['task'] in ['CellParamsRegressionSAXS', 'CellParamsRegressionXRD', 'CellParamsRegressionxPDF']:
+                # Get prediction
+                out = forward_pass(data)
+                # Get ground truth
+                ground_truth = data.y['cell_params']
+                # Calculate loss
+                error += metric(out, ground_truth) 
+            elif config_dict['task'] in ['CrystalSystemClassificationSAXS','CrystalSystemClassificationXRD','CrystalSystemClassificationxPDF']:
+                # Get prediction
+                out = forward_pass(data)
+                # Get ground truth
+                ground_truth = data.y['crystal_system_number']
+                # Calculate loss
+                error += metric(out, ground_truth) 
+            elif config_dict['task'] in ['SpacegroupClassificationSAXS','SpacegroupClassificationXRD','SpacegroupClassificationxPDF']:
+                # Get prediction
+                out = forward_pass(data)
+                # Get ground truth
+                ground_truth = data.y['space_group_number']
+                # Calculate loss
+                error += metric(out, ground_truth) 
+            elif config_dict['task'] in ['AbsPositionRegressionSAXS', 'AbsPositionRegressionXRD', 'AbsPositionRegressionxPDF']:
                 # Get prediction
                 out = forward_pass(data) # (B, X+Y+Z)
                 # Get ground truth by sorting and padding
@@ -634,9 +801,32 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     # Append
                     ground_truth[i] = x.T.flatten()
 
-                error += metric(out, ground_truth)
+                mask = ground_truth < 100
+                error += metric(out, ground_truth)[mask].mean(dim=-1)
 
-    print('Finished testing loop', flush=True)
+            elif config_dict['task'] in ['UnitCellPositionRegressionSAXS', 'UnitCellPositionRegressionXRD','UnitCellPositionRegressionxPDF']:
+                # Get prediction
+                out = forward_pass(data) # (B, X+Y+Z)
+                # Get ground truth by sorting and padding
+                ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], config_dict['Model_config']['out_channels']).to(device=device)
+                for i, x in enumerate(unbatch(data.y['unit_cell_pos_abs'], data.batch)):
+                    # Sort according to norm
+                    norms = torch.norm(x, p=2, dim=-1)
+                    _, indices = torch.sort(norms, descending=False, dim=0)
+                    x = x[indices]
+
+                    # Pad 
+                    padding_size = config_dict['Model_config']['out_channels']//3 - x.size(0)
+                    if padding_size > 0:
+                        padding = torch.full((padding_size, x.size(1)), 100, dtype=x.dtype).to(device=device)
+                        x = torch.cat([x, padding], dim=0)
+
+                    # Append
+                    ground_truth[i] = x.T.flatten()
+                    
+                    # mask out the padding
+                mask = ground_truth < 100
+                error += metric(out, ground_truth)[mask].mean(dim=-1)
 
     if 'Classification' in config_dict['task']:
         test_error = torch.tensor(0)
@@ -652,16 +842,28 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
             writer.add_scalar('posMAE/test', test_error, epoch)
 
             print(f'Test position MAE: {test_error:.4f}', flush=True)
-        elif 'PositionRegressionSAXS' in config_dict['task']:
-            writer.add_scalar('posMAE/test', test_error, epoch)
+        elif 'AbsPositionRegressionSAXS' in config_dict['task']:
+            writer.add_scalar('absposMAE/test', test_error, epoch)
 
             print(f'Test position MAE: {test_error:.4f}', flush=True)
-        elif 'PositionRegressionXRD' in config_dict['task']:
-            writer.add_scalar('posMAE/test', test_error, epoch)
+        elif 'AbsPositionRegressionXRD' in config_dict['task']:
+            writer.add_scalar('absposMAE/test', test_error, epoch)
 
             print(f'Test position MAE: {test_error:.4f}', flush=True)
-        elif 'PositionRegressionxPDF' in config_dict['task']:
-            writer.add_scalar('posMAE/test', test_error, epoch)
+        elif 'AbsPositionRegressionxPDF' in config_dict['task']:
+            writer.add_scalar('absposMAE/test', test_error, epoch)
+
+            print(f'Test position MAE: {test_error:.4f}', flush=True)
+        elif 'UnitCellPositionRegressionSAXS' in config_dict['task']:
+            writer.add_scalar('unitcellposMAE/test', test_error, epoch)
+
+            print(f'Test position MAE: {test_error:.4f}', flush=True)
+        elif 'UnitCellPositionRegressionXRD' in config_dict['task']:
+            writer.add_scalar('unitcellposMAE/test', test_error, epoch)
+
+            print(f'Test position MAE: {test_error:.4f}', flush=True)
+        elif 'UnitCellPositionRegressionxPDF' in config_dict['task']:
+            writer.add_scalar('unitcellposMAE/test', test_error, epoch)
 
             print(f'Test position MAE: {test_error:.4f}', flush=True)
         else:
@@ -669,15 +871,11 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
 
             print(f'Test MSE: {test_error:.4f}', flush=True)
 
-    print('Finished Tensorboard logging', flush=True)
-
     # Close TensorBoard writer
     writer.close()
 
     # Add results to dataframe
     results_df.loc[i] = [config_dict['model'], config_dict['dataset'], config_dict['task'], seed, len(dataset.train_set), len(dataset.validation_set), len(dataset.test_set), stop_time - start_time, sum(p.numel() for p in model.parameters() if p.requires_grad), train_loss, val_f1, test_f1, val_error.detach().cpu().numpy(), test_error.detach().cpu().numpy()]
 
-    print('Added results to dataframe', flush=True)
-    
 # Save results to csv file
 results_df.to_csv(f"{save_dir}/../results.csv")

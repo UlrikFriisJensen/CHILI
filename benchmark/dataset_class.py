@@ -2,12 +2,15 @@
 
 # Standard imports
 from pathlib import Path
+import os
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 import numpy as np
 import h5py
 from collections import namedtuple
 import pandas as pd
+from glob import glob
+from tqdm.auto import trange, tqdm
 
 # Machine Learning imports
 import torch
@@ -20,23 +23,34 @@ from sklearn.model_selection import train_test_split
 #%% Dataset Class
 
 class InOrgMatDatasets(Dataset):
-    def __init__(self, dataset, root='./', transform=None, pre_transform=None, pre_filter=None):
+    def __init__(self, root, dataset, transform=None, pre_transform=None, pre_filter=None):
+        
         self.dataset = dataset
-        if not Path(root).exists():
-            Path(root).mkdir(include_parents=True)
-        root += self.dataset + '/'
+        self.root = os.path.join(root, self.dataset)
+
+        # Create root directory if not exits
+        if not os.path.exists(self.root):
+            os.mkdir(self.root)
+
+        # Train Val Test sets as Subsets
         self.train_set = None
         self.validation_set = None
         self.test_set = None
-        super().__init__(root, transform, pre_transform, pre_filter)       
+        
+        # Something is wrong with super, manually:
+        # super().__init__(self.root, transform, pre_transform, pre_filter)       
+        self.transform = lambda data: data
+        self.pre_transform = lambda data: data
+        self.pre_filter = lambda data: data
+        self._indices = range(self.len(split=None))
 
     @property
     def raw_file_names(self):
-        return self.update_file_names(self.raw_dir, file_extension='h5')
+        return glob(os.path.join(self.raw_dir, '**/*.h5'))
     
     @property
     def processed_file_names(self):
-        return self.update_file_names(self.processed_dir, file_extension='pt')
+        return glob(os.path.join(self.processed_dir, '[!pre]*.pt'))
 
     def update_file_names(self, folder_path, file_extension='*'):
         file_names = [str(filepath.relative_to(folder_path)) for filepath in Path(folder_path).glob(f'*.{file_extension}') if 'pre' not in str(filepath)]
@@ -127,10 +141,10 @@ class InOrgMatDatasets(Dataset):
                         saxs = torch.tensor(h5f['ScatteringData'][key]['SAXS'][:], dtype=torch.float32),
                     )
 
-                    name = raw_path.split('.')[0].split('/')[-1]
+                    data_id = raw_path.split('.')[0].split('/')[-1]
                     
                     # Create graph data object
-                    data = Data(x=node_feat, edge_index=edge_index, edge_attr=edge_feat, pos_frac=pos_frac, pos_abs=pos_abs, y=target_dict, name=name)
+                    data = Data(x=node_feat, edge_index=edge_index, edge_attr=edge_feat, pos_frac=pos_frac, pos_abs=pos_abs, y=target_dict, data_id=data_id)
 
                     # Apply filters
                     if self.pre_filter is not None and not self.pre_filter(data):
@@ -189,9 +203,9 @@ class InOrgMatDatasets(Dataset):
             train_idx, validation_idx = train_test_split(train_idx, test_size=validation_size/(1-test_size), random_state=random_state)
             
             # Save indices to csv files
-            np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_train.csv'), train_idx, delimiter=',', fmt='%i')
-            np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
-            np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_test.csv'), test_idx, delimiter=',', fmt='%i')
+            np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_train.csv'), train_idx, delimiter=',', fmt='%i')
+            np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
+            np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_test.csv'), test_idx, delimiter=',', fmt='%i')
             
             # Update statistics dataframe
             df_stats[f'{split_strategy.capitalize()} data split'] = ''
@@ -206,9 +220,9 @@ class InOrgMatDatasets(Dataset):
                 train_idx, validation_idx = train_test_split(train_idx, test_size=validation_size/(1-test_size), random_state=random_state, stratify=df_stats.loc[train_idx][stratify_on])
                 
                 # Save indices to csv files
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_train.csv'), train_idx, delimiter=',', fmt='%i')
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_test.csv'), test_idx, delimiter=',', fmt='%i')
+                np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_train.csv'), train_idx, delimiter=',', fmt='%i')
+                np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
+                np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_test.csv'), test_idx, delimiter=',', fmt='%i')
 
                 # Update statistics dataframe
                 df_stats[f'{split_strategy.capitalize()} data split ({stratify_on})'] = ''
@@ -233,9 +247,9 @@ class InOrgMatDatasets(Dataset):
                 train_idx, validation_idx = train_test_split(train_idx, train_size=n_train, test_size=n_validation, random_state=random_state, stratify=df_stats.loc[train_idx][stratify_on])
                 
                 # Save indices to csv files
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_train.csv'), train_idx, delimiter=',', fmt='%i')
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_test.csv'), test_idx, delimiter=',', fmt='%i')
+                np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_{stratify_distribution}_train.csv'), train_idx, delimiter=',', fmt='%i')
+                np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_{stratify_distribution}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
+                np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_{stratify_distribution}_test.csv'), test_idx, delimiter=',', fmt='%i')
                 
                 # Update statistics dataframe
                 df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, Equal classes)'] = ''
@@ -249,49 +263,45 @@ class InOrgMatDatasets(Dataset):
             raise ValueError('Split strategy not recognized. Please use either "random" or "stratified"')
 
         # Update statistics file
-        df_stats.to_pickle(Path(self.processed_dir).joinpath('../datasetStatistics.pkl'))
+        df_stats.to_pickle(os.path.join(self.root, 'dataset_statistics.pkl'))
 
         if return_idx:
             return train_idx, validation_idx, test_idx
         else:
             return None
         
-    def load_data_split(self, split_strategy='random', stratify_on='Space group (Number)', stratify_distribution='match'):
+    def load_data_split(self, split_strategy='random', stratify_on='Space group (Number)', stratify_distribution='match') -> None:
         '''
         Load the indices of the train, validation and test sets from csv files in the processed directory.
         '''
         if split_strategy == 'random':
             # Load indices from csv files
-            train_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_train.csv'), delimiter=',', dtype=int)
-            validation_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_validation.csv'), delimiter=',', dtype=int)
-            test_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_test.csv'), delimiter=',', dtype=int)
-            
-            # Split the dataset into train, validation and test sets
-            self.train_set = Subset(self, train_idx)
-            self.validation_set = Subset(self, validation_idx)
-            self.test_set = Subset(self, test_idx)
+            train_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_train.csv'), delimiter=',', dtype=int)
+            validation_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_validation.csv'), delimiter=',', dtype=int)
+            test_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_test.csv'), delimiter=',', dtype=int)
+
         elif split_strategy == 'stratified':
+
             if stratify_distribution == 'match':
                 # Load indices from csv files
-                train_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_train.csv'), delimiter=',', dtype=int)
-                validation_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_validation.csv'), delimiter=',', dtype=int)
-                test_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_test.csv'), delimiter=',', dtype=int)
+                train_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_train.csv'), delimiter=',', dtype=int)
+                validation_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_validation.csv'), delimiter=',', dtype=int)
+                test_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_test.csv'), delimiter=',', dtype=int)
+
             elif stratify_distribution == 'equal':
                 # Load indices from csv files
-                train_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_train.csv'), delimiter=',', dtype=int)
-                validation_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_validation.csv'), delimiter=',', dtype=int)
-                test_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_test.csv'), delimiter=',', dtype=int)
-                
-            # Split the dataset into train, validation and test sets
-            self.train_set = Subset(self, train_idx)
-            self.validation_set = Subset(self, validation_idx)
-            self.test_set = Subset(self, test_idx)
-            
-        return None
+                train_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_train.csv'), delimiter=',', dtype=int)
+                validation_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_validation.csv'), delimiter=',', dtype=int)
+                test_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_test.csv'), delimiter=',', dtype=int)
+
+        # Split the dataset into train, validation and test sets
+        self.train_set = Subset(self, train_idx)
+        self.validation_set = Subset(self, validation_idx)
+        self.test_set = Subset(self, test_idx)
 
     def get_statistics(self, return_dataframe=False):
-        stat_path = Path(self.processed_dir).joinpath('../datasetStatistics.pkl')
-        if stat_path.exists():
+        stat_path = os.path.join(self.root,'dataset_statistics.pkl')
+        if os.path.exists(stat_path):
             df_stats = pd.read_pickle(stat_path)
         else:
             df_stats = pd.DataFrame(
@@ -309,7 +319,7 @@ class InOrgMatDatasets(Dataset):
                     'Elements', 
                 ])
             
-            for idx in range(self.len()):
+            for idx in trange(self.len()):
                 graph = self.get(idx=idx,)
                 df_stats.loc[df_stats.shape[0]] = [
                     idx,
@@ -334,7 +344,3 @@ class InOrgMatDatasets(Dataset):
                 return df_stats
         else:
             return None
-    
-if __name__ == '__main__':
-    InOrgMatDatasets('DatasetTest')
-    

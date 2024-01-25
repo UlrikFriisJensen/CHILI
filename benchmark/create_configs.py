@@ -8,7 +8,7 @@ models = ['GCN', 'GAT', 'GIN', 'GraphSAGE', 'EdgeCNN', 'GraphUNet', 'PMLP', 'MLP
 
 # Path to datasets
 dataset_dir = 'dataset'
-dataset_names = ['COD','SIM']
+dataset_names = ['CHILI-COD','CHILI-SIM']
 
 # Data distribution
 split_strategy = ['stratified', 'random']
@@ -19,9 +19,19 @@ stratify_distribution = ['equal', None]
 save_dir = 'results'
 
 # tasks to test
-tasks = ['AtomClassification', 'PositionRegression', 'DistanceRegression', 'CrystalSystemClassification', 'SpacegroupClassification',
-         'SAXSRegression', 'XRDRegression', 'xPDFRegression', 
-         'PositionRegressionSAXS', 'PositionRegressionXRD', 'PositionRegressionxPDF']
+prediction_tasks = [
+    'AtomClassification', 'PositionRegression', 'DistanceRegression', 
+    'CrystalSystemClassification', 'SpacegroupClassification',
+    'SAXSRegression', 'XRDRegression', 'xPDFRegression'
+]
+generative_tasks = [
+    'AbsPositionRegressionSAXS', 'AbsPositionRegressionXRD', 'AbsPositionRegressionxPDF',
+    'UnitCellPositionRegressionSAXS', 'UnitCellPositionRegressionXRD', 'UnitCellPositionRegressionxPDF',
+    'CrystalSystemClassificationSAXS', 'CrystalSystemClassificationXRD', 'CrystalSystemClassificationxPDF',
+    'SpacegroupClassificationSAXS', 'SpacegroupClassificationXRD', 'SpacegroupClassificationxPDF',
+    'CellParamsRegressionSAXS', 'CellParamsRegressionXRD', 'CellParamsRegressionxPDF'
+]
+tasks = prediction_tasks + generative_tasks
 
 ## Training configuration
 
@@ -30,7 +40,7 @@ batch_size = 16
 max_epochs = 1000
 training_time_seconds = 3600
 seeds = [42, 43, 44]
-max_patience = 10 # Epochs
+max_patience = 50 # Epochs
 save_latest_model = False
 
 ## Config dir
@@ -41,7 +51,7 @@ if not os.path.exists(config_dir):
 ## Create config files
 for dataset_name, strategy, on, distribution in zip(dataset_names, split_strategy, stratify_on, stratify_distribution):
 
-    config_dataset_dir = os.path.join(config_dir, f'{dataset_name}_{strategy}_{on}_{distribution}')
+    config_dataset_dir = os.path.join(config_dir, dataset_name)
     if not os.path.exists(config_dataset_dir):
         os.mkdir(config_dataset_dir)
 
@@ -68,6 +78,13 @@ for dataset_name, strategy, on, distribution in zip(dataset_names, split_strateg
             hidden_channels = 128
 
         for task in tasks:
+        
+            # MLP only for generative tasks
+            if (model == 'MLP') and (task not in generative_tasks):
+                continue
+            # Generative tasks only for MLP
+            if (model != 'MLP') and (task in generative_tasks):
+                continue
 
             if task == 'AtomClassification':
                 input_channels = 3
@@ -75,23 +92,57 @@ for dataset_name, strategy, on, distribution in zip(dataset_names, split_strateg
             elif task == 'PositionRegression':
                 input_channels = 4
                 output_channels = 3
-            elif task == 'PositionRegressionSAXS':
+            elif task == 'AbsPositionRegressionSAXS':
                 input_channels = 300
                 output_channels = 600 # 200 atoms
-            elif task == 'PositionRegressionXRD':
+            elif task == 'AbsPositionRegressionXRD':
                 input_channels = 580
                 output_channels = 600 # 200 atoms
-            elif task == 'PositionRegressionxPDF':
+            elif task == 'AbsPositionRegressionxPDF':
                 input_channels = 6000
                 output_channels = 600 # 200 atoms
+            elif task == 'UnitCellPositionRegressionSAXS':
+                input_channels = 300
+                output_channels = 60 # 20 atoms 
+            elif task == 'UnitCellPositionRegressionXRD':
+                input_channels = 580
+                output_channels = 60 # 20 atoms
+            elif task == 'UnitCellPositionRegressionxPDF':
+                input_channels = 6000
+                output_channels = 60 # 20 atoms
+            elif task == 'CrystalSystemClassificationSAXS':
+                input_channels = 300
+                output_channels = 7
+            elif task == 'CrystalSystemClassificationXRD':
+                input_channels = 580
+                output_channels = 7
+            elif task == 'CrystalSystemClassificationxPDF':
+                input_channels = 6000
+                output_channels = 7
+            elif task == 'SpacegroupClassificationSAXS':
+                input_channels = 300
+                output_channels = 230
+            elif task == 'SpacegroupClassificationXRD':
+                input_channels = 580
+                output_channels = 230
+            elif task == 'SpacegroupClassificationxPDF':
+                input_channels = 6000
+                output_channels = 230
+            elif task == 'CellParamsRegressionSAXS':
+                input_channels = 300
+                output_channels = 6
+            elif task == 'CellParamsRegressionXRD':
+                input_channels = 580
+                output_channels = 6
+            elif task == 'CellParamsRegressionxPDF':
+                input_channels = 6000
+                output_channels = 6
             else:
                 input_channels = 7
                 output_channels = 64
 
             if task == 'SpacegroupClassification':
                 sec_output_channels = 230
-            elif task == 'CrystalSystemClassification':
-                sec_output_channels = 7
             elif task == 'SAXSRegression':
                 sec_output_channels = 300
             elif task == 'XRDRegression':
@@ -106,7 +157,7 @@ for dataset_name, strategy, on, distribution in zip(dataset_names, split_strateg
             config = {
                 'dataset': dataset_name,
                 'root': dataset_dir,
-                'log_dir': os.path.join(save_dir, dataset_name),
+                'log_dir': save_dir,
                 'model': model,
                 'task': task,
                 'save_latest_model': save_latest_model,
