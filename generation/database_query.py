@@ -92,7 +92,7 @@ def queryCOD(save_folder, included_atoms=None, excluded_atoms=None, batch_size=8
     return None
 
 if __name__ == '__main__':
-    from cifCleaning import cif_cleaning_pipeline
+    from cif_cleaning import cif_cleaning_pipeline
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--include', nargs ='*', type=str)

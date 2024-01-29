@@ -161,11 +161,15 @@ cython_debug/
 
 # Project specific
 *.code-workspace
-Dataset/DatasetTest/
-Dataset/h5/
-Dataset/CIFs/ICSD*/
-Dataset/CIFs/COD*/
-Dataset/*/
-test*.*
-Results/*
-benchmark_configs/*
+
+benchmark/configs/ # Config files
+
+**/*.out
+**/*.sh
+benchmark/dataset/
+benchmark/results*/
+benchmark/configs/
+generation/generated_data/
+generation/*_batches/
+
+

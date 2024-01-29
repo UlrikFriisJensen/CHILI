@@ -5,7 +5,7 @@ from pathlib import Path
 from tqdm import tqdm
 from elements import elements
 from mendeleev import element
-from Code.cifSimulation import structureGenerator
+from cif_simulation import structureGenerator
 
 import argparse
 

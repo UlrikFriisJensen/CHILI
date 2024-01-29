@@ -2,17 +2,15 @@
 
 # Standard imports
 from pathlib import Path
+import os
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 import numpy as np
 import h5py
 from collections import namedtuple
 import pandas as pd
-
-# Chemistry imports
-# from diffpy.Structure import loadStructure
-# from mendeleev import element
-# from ase.io import read
+from glob import glob
+from tqdm.auto import trange, tqdm
 
 # Machine Learning imports
 import torch
@@ -25,23 +23,48 @@ from sklearn.model_selection import train_test_split
 #%% Dataset Class
 
 class InOrgMatDatasets(Dataset):
-    def __init__(self, dataset, root='./', transform=None, pre_transform=None, pre_filter=None):
+    def __init__(self, root, dataset, transform=None, pre_transform=None, pre_filter=None):
         self.dataset = dataset
-        if not Path(root).exists():
-            Path(root).mkdir(include_parents=True)
-        root += self.dataset + '/'
+        self.root = os.path.join(root, self.dataset)
+        # Create root directory if not exits
+        if not os.path.exists(self.root):
+            os.mkdir(self.root)
+        
+        # Train Val Test sets as Subsets
         self.train_set = None
         self.validation_set = None
         self.test_set = None
-        super().__init__(root, transform, pre_transform, pre_filter)       
+        
+        # Something is wrong with super, setup manually:
+        self.transform = lambda data: data
+        self.pre_transform = lambda data: data
+        self.pre_filter = lambda data: data
+
+        # Download if data if there are no raw files
+        if len(self.raw_file_names) == 0:
+            # Make raw folder
+            if not os.path.exists(os.path.join(self.root, 'raw')):
+                os.mkdir(os.path.join(self.root, 'raw'))
+            # Download
+            self.download()
+        # Process if processed folder is empty
+        if len(self.processed_file_names) == 0:
+            # Make processed folder
+            if not os.path.exists(os.path.join(self.root, 'processed')):
+                os.mkdir(os.path.join(self.root, 'processed'))
+            self.process()
+
+        self._indices = range(self.len())
 
     @property
     def raw_file_names(self):
-        return self.update_file_names(self.raw_dir, file_extension='h5')
+        paths = glob(os.path.join(self.raw_dir, '**/*.h5'))
+        return paths
     
     @property
     def processed_file_names(self):
-        return self.update_file_names(self.processed_dir, file_extension='pt')
+        paths = glob(os.path.join(self.processed_dir, '[!pre]*.pt'))
+        return paths
 
     def update_file_names(self, folder_path, file_extension='*'):
         file_names = [str(filepath.relative_to(folder_path)) for filepath in Path(folder_path).glob(f'*.{file_extension}') if 'pre' not in str(filepath)]
@@ -77,13 +100,14 @@ class InOrgMatDatasets(Dataset):
     
     def process(self):  
         idx = 0
-        for raw_path in self.raw_paths:
+        process_pbar = tqdm(desc='Processing data...', total=len(self.raw_file_names))
+        for raw_path in self.raw_file_names:
             # Read data from `raw_path`.
             with h5py.File(raw_path, 'r') as h5f:
                 # Read unit cell graph attributes
                 unit_cell_node_feat = torch.tensor(h5f['UnitCellGraph']['NodeFeatures'][:], dtype=torch.float32)
                 unit_cell_edge_index = torch.tensor(h5f['UnitCellGraph']['EdgeDirections'][:], dtype=torch.long)
-                unit_cell_edge_feat = torch.tensor(h5f['UnitCellGraph']['EdgeFeatures'][:], dtype=torch.float32)
+                unit_cell_edge_attr = torch.tensor(h5f['UnitCellGraph']['EdgeFeatures'][:], dtype=torch.float32)
                 unit_cell_pos_abs = torch.tensor(h5f['UnitCellGraph']['AbsoluteCoordinates'][:], dtype=torch.float32)
                 unit_cell_pos_frac = torch.tensor(h5f['UnitCellGraph']['FractionalCoordinates'][:], dtype=torch.float32)
                 # Read other labels
@@ -94,46 +118,55 @@ class InOrgMatDatasets(Dataset):
                 space_group_number = h5f['GlobalLabels']['SpaceGroupNumber'][()]
                 crystal_system = h5f['GlobalLabels']['CrystalSystem'][()].decode()
                 crystal_system_number = self.crystal_system_to_number(crystal_system)
+
                 # Read scattering data
                 for key in h5f['DiscreteParticleGraphs'].keys():
-                    # Read discrete particle graph attributes
+                        
                     node_feat = torch.tensor(h5f['DiscreteParticleGraphs'][key]['NodeFeatures'][:], dtype=torch.float32)
                     edge_index = torch.tensor(h5f['DiscreteParticleGraphs'][key]['EdgeDirections'][:], dtype=torch.long)
-                    edge_feat = torch.tensor(h5f['DiscreteParticleGraphs'][key]['EdgeFeatures'][:], dtype=torch.float32)
-                    pos_abs = torch.tensor(h5f['DiscreteParticleGraphs'][key]['AbsoluteCoordinates'][:], dtype=torch.float32)
-                    pos_frac = torch.tensor(h5f['DiscreteParticleGraphs'][key]['FractionalCoordinates'][:], dtype=torch.float32)
-                    
-                    # Create target dictionary
-                    target_dict = dict(
-                        # Save global labels
-                        crystal_type = crystal_type,
-                        space_group_symbol = space_group_symbol,
-                        space_group_number = space_group_number,
-                        crystal_system = crystal_system,
-                        crystal_system_number = crystal_system_number,
-                        atomic_species = atomic_species,
-                        n_atomic_species = len(atomic_species),
-                        np_size = h5f['DiscreteParticleGraphs'][key]['NP size (Å)'][()],
-                        n_atoms = node_feat.shape[0],
-                        n_bonds = edge_index.shape[1],
-                        # Save unit cell graph attributes
-                        cell_params = cell_params,
-                        unit_cell_node_feat = unit_cell_node_feat,
-                        unit_cell_edge_index = unit_cell_edge_index,
-                        unit_cell_edge_feat = unit_cell_edge_feat,
-                        unit_cell_pos_abs = unit_cell_pos_abs,
-                        unit_cell_pos_frac = unit_cell_pos_frac,
-                        # Save scattering data
-                        nd = torch.tensor(h5f['ScatteringData'][key]['ND'][:], dtype=torch.float32),
-                        xrd = torch.tensor(h5f['ScatteringData'][key]['XRD'][:], dtype=torch.float32),
-                        nPDF = torch.tensor(h5f['ScatteringData'][key]['nPDF'][:], dtype=torch.float32),
-                        xPDF = torch.tensor(h5f['ScatteringData'][key]['xPDF'][:], dtype=torch.float32),
-                        sans = torch.tensor(h5f['ScatteringData'][key]['SANS'][:], dtype=torch.float32),
-                        saxs = torch.tensor(h5f['ScatteringData'][key]['SAXS'][:], dtype=torch.float32),
-                    )
+                    edge_attr = torch.tensor(h5f['DiscreteParticleGraphs'][key]['EdgeFeatures'][:], dtype=torch.float32)
                     
                     # Create graph data object
-                    data = Data(x=node_feat, edge_index=edge_index, edge_attr=edge_feat, pos_frac=pos_frac, pos_abs=pos_abs, y=target_dict)
+                    data = Data(
+                        data_id = raw_path.split('.')[0].split('/')[-1],
+                        x = node_feat,
+                        edge_index = edge_index,
+                        edge_attr = edge_attr,
+                        pos_abs = torch.tensor(h5f['DiscreteParticleGraphs'][key]['AbsoluteCoordinates'][:], dtype=torch.float32),
+                        pos_frac = torch.tensor(h5f['DiscreteParticleGraphs'][key]['FractionalCoordinates'][:], dtype=torch.float32),
+
+                        y = dict(
+                            crystal_type = crystal_type,
+                            space_group_symbol = space_group_symbol,
+                            space_group_number = space_group_number,
+                            crystal_system = crystal_system,
+                            crystal_system_number = crystal_system_number,
+                            atomic_species = atomic_species,
+                            n_atomic_species = len(atomic_species),
+                            np_size = h5f['DiscreteParticleGraphs'][key]['NP size (Å)'][()],
+                            n_atoms = node_feat.shape[0],
+                            n_bonds = edge_index.shape[1],
+
+                            # Save unit cell graph attributes
+                            cell_params = cell_params,
+                            unit_cell_x = unit_cell_node_feat,
+                            unit_cell_edge_index = unit_cell_edge_index,
+                            unit_cell_edge_attr = unit_cell_edge_attr,
+                            unit_cell_pos_abs = unit_cell_pos_abs,
+                            unit_cell_pos_frac = unit_cell_pos_frac,
+                            unit_cell_n_atoms = unit_cell_node_feat.shape[0],
+                            unit_cell_n_bonds = unit_cell_edge_index.shape[1],
+
+                            # Save scattering data
+                            nd = torch.tensor(h5f['ScatteringData'][key]['ND'][:], dtype=torch.float32),
+                            xrd = torch.tensor(h5f['ScatteringData'][key]['XRD'][:], dtype=torch.float32),
+                            nPDF = torch.tensor(h5f['ScatteringData'][key]['nPDF'][:], dtype=torch.float32),
+                            xPDF = torch.tensor(h5f['ScatteringData'][key]['xPDF'][:], dtype=torch.float32),
+                            sans = torch.tensor(h5f['ScatteringData'][key]['SANS'][:], dtype=torch.float32),
+                            saxs = torch.tensor(h5f['ScatteringData'][key]['SAXS'][:], dtype=torch.float32),
+                        )
+                    )
+                    #data = Data(x=node_feat, edge_index=edge_index, edge_attr=edge_feat, pos_frac=pos_frac, pos_abs=pos_abs, y=target_dict, data_id=data_id)
 
                     # Apply filters
                     if self.pre_filter is not None and not self.pre_filter(data):
@@ -144,11 +177,14 @@ class InOrgMatDatasets(Dataset):
                         data = self.pre_transform(data)
                     
                     # Save to `self.processed_dir`.
-                    torch.save(data, Path(self.processed_dir).joinpath(f'./data_{idx}.pt'))
-                    
-                    # Update index
+                    torch.save(data, os.path.join(self.processed_dir, f'data_{idx}.pt'))
+
                     idx += 1
-        return None          
+
+            # Update process pbar
+            process_pbar.update(1)
+
+        process_pbar.close()         
 
     def len(self, split=None):
         if split is None:
@@ -165,7 +201,7 @@ class InOrgMatDatasets(Dataset):
 
     def get(self, idx, split=None):
         if split is None:
-            data = torch.load(Path(self.processed_dir).joinpath(f'./data_{idx}.pt'))
+            data = torch.load(os.path.join(self.processed_dir, f'data_{idx}.pt'))
         elif split.lower() == 'train':
             data = self.train_set[idx]
         elif split.lower() in ['validation', 'val']:
@@ -192,9 +228,9 @@ class InOrgMatDatasets(Dataset):
             train_idx, validation_idx = train_test_split(train_idx, test_size=validation_size/(1-test_size), random_state=random_state)
             
             # Save indices to csv files
-            np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_train.csv'), train_idx, delimiter=',', fmt='%i')
-            np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
-            np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_test.csv'), test_idx, delimiter=',', fmt='%i')
+            np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_train.csv'), train_idx, delimiter=',', fmt='%i')
+            np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
+            np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_test.csv'), test_idx, delimiter=',', fmt='%i')
             
             # Update statistics dataframe
             df_stats[f'{split_strategy.capitalize()} data split'] = ''
@@ -209,9 +245,9 @@ class InOrgMatDatasets(Dataset):
                 train_idx, validation_idx = train_test_split(train_idx, test_size=validation_size/(1-test_size), random_state=random_state, stratify=df_stats.loc[train_idx][stratify_on])
                 
                 # Save indices to csv files
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_train.csv'), train_idx, delimiter=',', fmt='%i')
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_test.csv'), test_idx, delimiter=',', fmt='%i')
+                np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_train.csv'), train_idx, delimiter=',', fmt='%i')
+                np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
+                np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_test.csv'), test_idx, delimiter=',', fmt='%i')
 
                 # Update statistics dataframe
                 df_stats[f'{split_strategy.capitalize()} data split ({stratify_on})'] = ''
@@ -236,9 +272,9 @@ class InOrgMatDatasets(Dataset):
                 train_idx, validation_idx = train_test_split(train_idx, train_size=n_train, test_size=n_validation, random_state=random_state, stratify=df_stats.loc[train_idx][stratify_on])
                 
                 # Save indices to csv files
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_train.csv'), train_idx, delimiter=',', fmt='%i')
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
-                np.savetxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_test.csv'), test_idx, delimiter=',', fmt='%i')
+                np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_{stratify_distribution}_train.csv'), train_idx, delimiter=',', fmt='%i')
+                np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_{stratify_distribution}_validation.csv'), validation_idx, delimiter=',', fmt='%i')
+                np.savetxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_{stratify_distribution}_test.csv'), test_idx, delimiter=',', fmt='%i')
                 
                 # Update statistics dataframe
                 df_stats[f'{split_strategy.capitalize()} data split ({stratify_on}, Equal classes)'] = ''
@@ -252,49 +288,45 @@ class InOrgMatDatasets(Dataset):
             raise ValueError('Split strategy not recognized. Please use either "random" or "stratified"')
 
         # Update statistics file
-        df_stats.to_pickle(Path(self.processed_dir).joinpath('../datasetStatistics.pkl'))
+        df_stats.to_pickle(os.path.join(self.root, 'dataset_statistics.pkl'))
 
         if return_idx:
             return train_idx, validation_idx, test_idx
         else:
             return None
         
-    def load_data_split(self, split_strategy='random', stratify_on='Space group (Number)', stratify_distribution='match'):
+    def load_data_split(self, split_strategy='random', stratify_on='Space group (Number)', stratify_distribution='match') -> None:
         '''
         Load the indices of the train, validation and test sets from csv files in the processed directory.
         '''
         if split_strategy == 'random':
             # Load indices from csv files
-            train_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_train.csv'), delimiter=',', dtype=int)
-            validation_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_validation.csv'), delimiter=',', dtype=int)
-            test_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_test.csv'), delimiter=',', dtype=int)
-            
-            # Split the dataset into train, validation and test sets
-            self.train_set = Subset(self, train_idx)
-            self.validation_set = Subset(self, validation_idx)
-            self.test_set = Subset(self, test_idx)
+            train_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_train.csv'), delimiter=',', dtype=int)
+            validation_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_validation.csv'), delimiter=',', dtype=int)
+            test_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_test.csv'), delimiter=',', dtype=int)
+
         elif split_strategy == 'stratified':
+
             if stratify_distribution == 'match':
                 # Load indices from csv files
-                train_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_train.csv'), delimiter=',', dtype=int)
-                validation_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_validation.csv'), delimiter=',', dtype=int)
-                test_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_test.csv'), delimiter=',', dtype=int)
+                train_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_train.csv'), delimiter=',', dtype=int)
+                validation_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_validation.csv'), delimiter=',', dtype=int)
+                test_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_test.csv'), delimiter=',', dtype=int)
+
             elif stratify_distribution == 'equal':
                 # Load indices from csv files
-                train_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_train.csv'), delimiter=',', dtype=int)
-                validation_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_validation.csv'), delimiter=',', dtype=int)
-                test_idx = np.loadtxt(Path(self.processed_dir).joinpath(f'../dataSplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_test.csv'), delimiter=',', dtype=int)
-                
-            # Split the dataset into train, validation and test sets
-            self.train_set = Subset(self, train_idx)
-            self.validation_set = Subset(self, validation_idx)
-            self.test_set = Subset(self, test_idx)
-            
-        return None
+                train_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_train.csv'), delimiter=',', dtype=int)
+                validation_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_validation.csv'), delimiter=',', dtype=int)
+                test_idx = np.loadtxt(os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_test.csv'), delimiter=',', dtype=int)
+
+        # Split the dataset into train, validation and test sets
+        self.train_set = Subset(self, train_idx)
+        self.validation_set = Subset(self, validation_idx)
+        self.test_set = Subset(self, test_idx)
 
     def get_statistics(self, return_dataframe=False):
-        stat_path = Path(self.processed_dir).joinpath('../datasetStatistics.pkl')
-        if stat_path.exists():
+        stat_path = os.path.join(self.root,'dataset_statistics.pkl')
+        if os.path.exists(stat_path):
             df_stats = pd.read_pickle(stat_path)
         else:
             df_stats = pd.DataFrame(
@@ -312,20 +344,20 @@ class InOrgMatDatasets(Dataset):
                     'Elements', 
                 ])
             
-            for idx in range(self.len()):
+            for idx in trange(self.len()):
                 graph = self.get(idx=idx,)
                 df_stats.loc[df_stats.shape[0]] = [
                     idx,
                     float(graph.num_nodes), 
                     float(graph.num_edges), 
-                    float(graph.y['n_atomic_species']), 
-                    graph.y['space_group_symbol'],
-                    float(graph.y['space_group_number']),
-                    graph.y['crystal_type'], 
-                    graph.y['crystal_system'],
-                    graph.y['crystal_system_number'],
-                    graph.y['np_size'], 
-                    graph.y['atomic_species'], 
+                    float(graph.n_atomic_species), 
+                    graph.space_group_symbol,
+                    float(graph.space_group_number),
+                    graph.crystal_type,
+                    graph.crystal_system,
+                    graph.crystal_system_number,
+                    graph.np_size,
+                    graph.atomic_species,
                 ]
         
         df_stats.to_pickle(stat_path)
@@ -337,7 +369,3 @@ class InOrgMatDatasets(Dataset):
                 return df_stats
         else:
             return None
-    
-if __name__ == '__main__':
-    InOrgMatDatasets('DatasetTest')
-    
