@@ -352,14 +352,14 @@ class InOrgMatDatasets(Dataset):
                     float(graph.num_nodes), 
                     float(graph.num_edges), 
                     float(graph.num_edges)/float(graph.num_nodes),
-                    float(graph.n_atomic_species), 
-                    graph.space_group_symbol,
-                    float(graph.space_group_number),
-                    graph.crystal_type,
-                    graph.crystal_system,
-                    graph.crystal_system_number,
-                    graph.np_size,
-                    graph.atomic_species,
+                    float(graph.y['n_atomic_species']), 
+                    graph.y['space_group_symbol'],
+                    float(graph.y['space_group_number']),
+                    graph.y['crystal_type'],
+                    graph.y['crystal_system'],
+                    graph.y['crystal_system_number'],
+                    graph.y['np_size'],
+                    graph.y['atomic_species'],
                 ]
         
         df_stats.to_pickle(stat_path)
