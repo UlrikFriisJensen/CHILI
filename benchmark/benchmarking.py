@@ -27,6 +27,7 @@ from dataset_class import InOrgMatDatasets
 
 # Ignore warnings
 warnings.simplefilter(action='ignore')
+warnings.filterwarnings("ignore", message="Some classes do not exist in the target. F1 scores for these classes will be cast to zeros.", category=UserWarning)
 
 # Simple MLP model
 class SimpleMLP(nn.Module):
@@ -46,6 +47,11 @@ class SimpleMLP(nn.Module):
         self.layers.append(nn.Linear(hidden_channels, out_channels))
 
     def forward(self, x, batch):
+
+        if len(x.shape) < 2:
+            batch_size = torch.max(batch)+1
+            x = x.reshape(batch_size, x.shape[-1] // batch_size)
+
         for i in range(len(self.layers)-1):
             x = F.relu(self.layers[i](x))
         x = self.layers[-1](x)
@@ -156,7 +162,7 @@ if config_dict['task'] in ['UnitCellPositionRegressionxPDF', 'UnitCellPositionRe
     filtered_idx = []
     for idx in dataset.train_set.indices:
         data = dataset[idx]
-        if len(data.y['unit_cell_pos_abs']) <= config_dict['Model_config']['out_channels']//3:
+        if len(data.y['unit_cell_pos_frac']) <= config_dict['Model_config']['out_channels']//3:
             filtered_idx.append(idx)
         
     dataset.train_set = Subset(dataset, filtered_idx)
@@ -165,7 +171,7 @@ if config_dict['task'] in ['UnitCellPositionRegressionxPDF', 'UnitCellPositionRe
     filtered_idx = []
     for idx in dataset.validation_set.indices:
         data = dataset[idx]
-        if len(data.y['unit_cell_pos_abs']) <= config_dict['Model_config']['out_channels']//3:
+        if len(data.y['unit_cell_pos_frac']) <= config_dict['Model_config']['out_channels']//3:
             filtered_idx.append(idx)
         
     dataset.validation_set = Subset(dataset, filtered_idx)
@@ -174,7 +180,7 @@ if config_dict['task'] in ['UnitCellPositionRegressionxPDF', 'UnitCellPositionRe
     filtered_idx = []
     for idx in dataset.test_set.indices:
         data = dataset[idx]
-        if len(data.y['unit_cell_pos_abs']) <= config_dict['Model_config']['out_channels']//3:
+        if len(data.y['unit_cell_pos_frac']) <= config_dict['Model_config']['out_channels']//3:
             filtered_idx.append(idx)
         
     dataset.test_set = Subset(dataset, filtered_idx)
@@ -235,7 +241,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 return model.forward(x=data.pos_abs, edge_index=data.edge_index)
         else:
             def forward_pass(data):
-                return model.forward(x=data.pos_abs, edge_index=data.edge_index, edge_attr=data.edge_attr, batch=data.batch)
+                return model.forward(x=data.pos_abs, edge_index=data.edge_index, edge_attr=data.edge_attr, edge_weight=data.edge_attr, batch=data.batch)
     elif config_dict['task'] in ['SpacegroupClassification', 'CrystalSystemClassification', 'SAXSRegression', 'XRDRegression', 'xPDFRegression']:
         if config_dict['model'] in ['GraphUNet']:
             def forward_pass(data):
@@ -249,7 +255,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 return out
         else:
             def forward_pass(data):
-                out = model.forward(x=torch.cat((data.x, data.pos_abs),dim=1), edge_index=data.edge_index, edge_attr=data.edge_attr, batch=data.batch)
+                out = model.forward(x=torch.cat((data.x, data.pos_abs),dim=1), edge_index=data.edge_index, edge_attr=data.edge_attr, edge_weight=data.edge_attr, batch=data.batch)
                 out = secondary.forward(out, data.batch)
                 return out
     elif config_dict['task'] == 'PositionRegression':
@@ -261,7 +267,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 return model.forward(x=data.x, edge_index=data.edge_index)
         else:
             def forward_pass(data):
-                return model.forward(x=data.x, edge_index=data.edge_index, edge_attr=data.edge_attr, batch=data.batch)
+                return model.forward(x=data.x, edge_index=data.edge_index, edge_attr=data.edge_attr, edge_weight=data.edge_attr, batch=data.batch)
     elif config_dict['task'] == 'DistanceRegression':
         if config_dict['model'] == 'PMLP':
             def forward_pass(data):
@@ -269,15 +275,36 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
         else:
             def forward_pass(data):
                 return model.forward(x=torch.cat((data.x, data.pos_abs),dim=1), edge_index=data.edge_index, batch=data.batch)
-    elif config_dict['task'] in ['AbsPositionRegressionSAXS', 'UnitCellPositionRegressionSAXS', 'CellParamsRegressionSAXS', 'CrystalSystemClassificationSAXS', 'SpacegroupClassificationSAXS']:
+    elif config_dict['task'] in ['AbsPositionRegressionSAXS', 'UnitCellPositionRegressionSAXS', 'CellParamsRegressionSAXS']:
         def forward_pass(data):
-            return model.forward(x=data.y['saxs'][1,:], batch=data.batch)
-    elif config_dict['task'] in ['AbsPositionRegressionXRD', 'UnitCellPositionRegressionXRD', 'CellParamsRegressionXRD', 'CrystalSystemClassificationXRD', 'SpacegroupClassificationXRD']:
+            signal = data.y['saxs'][1::2,:]
+            signal = (signal - torch.min(signal, dim=-1, keepdim=True)[0]) / (torch.max(signal, dim=-1, keepdim=True)[0] - torch.min(signal, dim=-1, keepdim=True)[0])
+            return model.forward(x=signal, batch=data.batch)
+    elif config_dict['task'] in ['CrystalSystemClassificationSAXS', 'SpacegroupClassificationSAXS']:
         def forward_pass(data):
-            return model.forward(x=data.y['xrd'][1,:], batch=data.batch)
-    elif config_dict['task'] in ['AbsPositionRegressionxPDF', 'UnitCellPositionRegressionxPDF', 'CellParamsRegressionxPDF', 'CrystalSystemClassificationxPDF', 'SpacegroupClassificationxPDF']:
+            signal = data.y['saxs'][1::2,:]
+            signal = (signal - torch.min(signal, dim=-1, keepdim=True)[0]) / (torch.max(signal, dim=-1, keepdim=True)[0] - torch.min(signal, dim=-1, keepdim=True)[0])
+            return model.forward(x=signal, batch=data.batch)
+    elif config_dict['task'] in ['AbsPositionRegressionXRD', 'UnitCellPositionRegressionXRD', 'CellParamsRegressionXRD']:
         def forward_pass(data):
-            return model.forward(x=data.y['xPDF'][1,:], batch=data.batch)
+            signal = data.y['xrd'][1::2,:]
+            signal = (signal - torch.min(signal, dim=-1, keepdim=True)[0]) / (torch.max(signal, dim=-1, keepdim=True)[0] - torch.min(signal, dim=-1, keepdim=True)[0])
+            return model.forward(x=signal, batch=data.batch)
+    elif config_dict['task'] in ['CrystalSystemClassificationXRD', 'SpacegroupClassificationXRD']:
+        def forward_pass(data):
+            signal = data.y['xrd'][1::2,:]
+            signal = (signal - torch.min(signal, dim=-1, keepdim=True)[0]) / (torch.max(signal, dim=-1, keepdim=True)[0] - torch.min(signal, dim=-1, keepdim=True)[0])
+            return model.forward(x=signal, batch=data.batch)
+    elif config_dict['task'] in ['AbsPositionRegressionxPDF', 'UnitCellPositionRegressionxPDF', 'CellParamsRegressionxPDF']:
+        def forward_pass(data):
+            signal = data.y['xPDF'][1::2,:]
+            signal = (signal - torch.min(signal, dim=-1, keepdim=True)[0]) / (torch.max(signal, dim=-1, keepdim=True)[0] - torch.min(signal, dim=-1, keepdim=True)[0])
+            return model.forward(x=signal, batch=data.batch)
+    elif config_dict['task'] in ['CrystalSystemClassificationxPDF', 'SpacegroupClassificationxPDF']:
+        def forward_pass(data):
+            signal = data.y['xPDF'][1::2,:]
+            signal = (signal - torch.min(signal, dim=-1, keepdim=True)[0]) / (torch.max(signal, dim=-1, keepdim=True)[0] - torch.min(signal, dim=-1, keepdim=True)[0])
+            return model.forward(x=signal, batch=data.batch)
     else:
         raise NotImplementedError
 
@@ -357,7 +384,7 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
         total_loss = 0
 
         # batches pbar
-        batches_pbar = tqdm(desc='Traning epoch...', total = len(train_loader), disable=True)
+        batches_pbar = tqdm(desc='Training epoch...', total = len(train_loader), disable=True)
         for data in train_loader:
             # Send to device
             data = data.to(device)
@@ -380,21 +407,21 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 loss = criterion(out, ground_truth)
             elif config_dict['task'] == 'SAXSRegression':
                 out = forward_pass(data)
-                ground_truth = data.y['saxs'][1,:]
+                ground_truth = data.y['saxs'][1::2,:]
                 # Min-max normalize saxs data
-                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
+                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1, keepdim=True)[0]) / (torch.max(ground_truth, dim=-1, keepdim=True)[0] - torch.min(ground_truth, dim=-1, keepdim=True)[0])
                 loss = criterion(out, ground_truth)
             elif config_dict['task'] == 'XRDRegression':
                 out = forward_pass(data)
-                ground_truth = data.y['xrd'][1,:]
+                ground_truth = data.y['xrd'][1::2,:]
                 # Min-max normalize xrd data
-                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
+                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1, keepdim=True)[0]) / (torch.max(ground_truth, dim=-1, keepdim=True)[0] - torch.min(ground_truth, dim=-1, keepdim=True)[0])
                 loss = criterion(out, ground_truth)
             elif config_dict['task'] == 'xPDFRegression':
                 out = forward_pass(data)
-                ground_truth = data.y['xPDF'][1,:]
+                ground_truth = data.y['xPDF'][1::2,:]
                 # Min-max normalize xpdf data
-                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
+                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1, keepdim=True)[0]) / (torch.max(ground_truth, dim=-1, keepdim=True)[0] - torch.min(ground_truth, dim=-1, keepdim=True)[0])
                 loss = criterion(out, ground_truth)
             elif config_dict['task'] == 'DistanceRegression':
                 out = forward_pass(data)
@@ -405,28 +432,29 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 # Get prediction
                 out = forward_pass(data)
                 # Get ground truth
-                ground_truth = data.y['cell_params']
+                ground_truth = data.y['cell_params'].reshape(torch.max(data.batch)+1,6)
                 # Calculate loss
                 loss = criterion(out, ground_truth)
             elif config_dict['task'] in ['CrystalSystemClassificationSAXS','CrystalSystemClassificationXRD','CrystalSystemClassificationxPDF']:
                 # Get prediction
                 out = forward_pass(data)
                 # Get ground truth
-                ground_truth = data.y['crystal_system_number']
+                ground_truth = torch.tensor(data.y['crystal_system_number'], device=device)
                 # Calculate loss
                 loss = criterion(out, ground_truth)
             elif config_dict['task'] in ['SpacegroupClassificationSAXS','SpacegroupClassificationXRD','SpacegroupClassificationxPDF']:
                 # Get prediction
                 out = forward_pass(data)
                 # Get ground truth
-                ground_truth = data.y['space_group_number']
+                ground_truth = torch.tensor(data.y['space_group_number'], device=device)
                 # Calculate loss
                 loss = criterion(out, ground_truth)
             elif config_dict['task'] in ['AbsPositionRegressionSAXS', 'AbsPositionRegressionXRD', 'AbsPositionRegressionxPDF']:
                 # Get prediction
                 out = forward_pass(data) # (B, X+Y+Z)
                 # Get ground truth by sorting and padding
-                ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], config_dict['Model_config']['out_channels']).to(device=device)
+                batch_size = torch.max(data.batch) + 1
+                ground_truth = torch.zeros(batch_size, config_dict['Model_config']['out_channels']).to(device=device)
                 for i, x in enumerate(unbatch(data.pos_abs, data.batch)):
                     # Sort according to norm
                     norms = torch.norm(x, p=2, dim=-1)
@@ -442,21 +470,28 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     # Append
                     ground_truth[i] = x.T.flatten()
                     
-                    # mask out the padding
+                # mask out the padding
                 mask = ground_truth < 100
-                loss = criterion(out, ground_truth)[mask].mean(dim=-1)
+                loss = criterion(out, ground_truth)[mask].mean()
             elif config_dict['task'] in ['UnitCellPositionRegressionSAXS', 'UnitCellPositionRegressionXRD','UnitCellPositionRegressionxPDF']:
                 # Get prediction
                 out = forward_pass(data) # (B, X+Y+Z)
                 # Get ground truth by sorting and padding
-                ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], config_dict['Model_config']['out_channels']).to(device=device)
-                for i, x in enumerate(unbatch(data.y['unit_cell_pos_abs'], data.batch)):
+                batch_size = torch.max(data.batch) + 1
+                ground_truth = torch.zeros(batch_size, config_dict['Model_config']['out_channels']).to(device=device)
+                # We cannot unbatch, since data.batch refers to the nanoparticle positions. Instead
+                lidx = 0
+                for i, size in enumerate(data.y['unit_cell_n_atoms']):
+                    # Extract the unit cell
+                    x = data.y['unit_cell_pos_frac'][lidx:size]
+                    lidx += size
+                    
                     # Sort according to norm
                     norms = torch.norm(x, p=2, dim=-1)
                     _, indices = torch.sort(norms, descending=False, dim=0)
                     x = x[indices]
 
-                    # Pad 
+                    # Pad
                     padding_size = config_dict['Model_config']['out_channels']//3 - x.size(0)
                     if padding_size > 0:
                         padding = torch.full((padding_size, x.size(1)), 100, dtype=x.dtype).to(device=device)
@@ -464,10 +499,10 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
 
                     # Append
                     ground_truth[i] = x.T.flatten()
-                    
+
                     # mask out the padding
                 mask = ground_truth < 100
-                loss = criterion(out, ground_truth)[mask].mean(dim=-1)
+                loss = criterion(out, ground_truth)[mask].mean()
 
             optimizer.zero_grad()
             loss.backward()
@@ -510,21 +545,21 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     error += position_MAE(out, data.pos_abs)
                 elif config_dict['task'] == 'SAXSRegression':
                     out = forward_pass(data)
-                    ground_truth = data.y['saxs'][1,:]
+                    ground_truth = data.saxs[1::2,:]
                     # Min-max normalize saxs data
-                    ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
+                    ground_truth = (ground_truth - torch.min(ground_truth, dim=-1, keepdim=True)[0]) / (torch.max(ground_truth, dim=-1, keepdim=True)[0] - torch.min(ground_truth, dim=-1, keepdim=True)[0])
                     error += metric(out, ground_truth)
                 elif config_dict['task'] == 'XRDRegression':
                     out = forward_pass(data)
-                    ground_truth = data.y['xrd'][1,:]
+                    ground_truth = data.y['xrd'][1::2,:]
                     # Min-max normalize xrd data
-                    ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
+                    ground_truth = (ground_truth - torch.min(ground_truth, dim=-1, keepdim=True)[0]) / (torch.max(ground_truth, dim=-1, keepdim=True)[0] - torch.min(ground_truth, dim=-1, keepdim=True)[0])
                     error += metric(out, ground_truth)
                 elif config_dict['task'] == 'xPDFRegression':
                     out = forward_pass(data)
-                    ground_truth = data.y['xPDF'][1,:]
+                    ground_truth = data.y['xPDF'][1::2,:]
                     # Min-max normalize xpdf data
-                    ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
+                    ground_truth = (ground_truth - torch.min(ground_truth, dim=-1, keepdim=True)[0]) / (torch.max(ground_truth, dim=-1, keepdim=True)[0] - torch.min(ground_truth, dim=-1, keepdim=True)[0])
                     error += metric(out, ground_truth)
                 elif config_dict['task'] == 'DistanceRegression':
                     out = forward_pass(data)
@@ -535,28 +570,31 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     # Get prediction
                     out = forward_pass(data)
                     # Get ground truth
-                    ground_truth = data.y['cell_params']
+                    ground_truth = data.y['cell_params'].reshape(torch.max(data.batch)+1,6)
                     # Calculate loss
                     error += metric(out, ground_truth) 
                 elif config_dict['task'] in ['CrystalSystemClassificationSAXS','CrystalSystemClassificationXRD','CrystalSystemClassificationxPDF']:
                     # Get prediction
                     out = forward_pass(data)
                     # Get ground truth
-                    ground_truth = data.y['crystal_system_number']
+                    _, predicted = torch.max(out.data, 1)
+                    ground_truth = torch.tensor(data.y['crystal_system_number'], device=device)
                     # Calculate loss
-                    error += metric(out, ground_truth) 
+                    MC_F1.update(predicted, ground_truth)
                 elif config_dict['task'] in ['SpacegroupClassificationSAXS','SpacegroupClassificationXRD','SpacegroupClassificationxPDF']:
                     # Get prediction
                     out = forward_pass(data)
                     # Get ground truth
-                    ground_truth = data.y['space_group_number']
+                    _, predicted = torch.max(out.data, 1)
+                    ground_truth = torch.tensor(data.y['space_group_number'], device=device)
                     # Calculate loss
-                    error += metric(out, ground_truth) 
+                    MC_F1.update(predicted, ground_truth)
                 elif config_dict['task'] in ['AbsPositionRegressionSAXS', 'AbsPositionRegressionXRD', 'AbsPositionRegressionxPDF']:
                     # Get prediction
                     out = forward_pass(data) # (B, X+Y+Z)
                     # Get ground truth by sorting and padding
-                    ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], config_dict['Model_config']['out_channels']).to(device=device)
+                    batch_size = torch.max(data.batch) + 1
+                    ground_truth = torch.zeros(batch_size, config_dict['Model_config']['out_channels']).to(device=device)
                     for i, x in enumerate(unbatch(data.pos_abs, data.batch)):
                         # Sort according to norm
                         norms = torch.norm(x, p=2, dim=-1)
@@ -571,22 +609,31 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
 
                         # Append
                         ground_truth[i] = x.T.flatten()
-
+                        
+                    # mask out the padding
                     mask = ground_truth < 100
-                    error += metric(out, ground_truth)[mask].mean(dim=-1)
+                    error += metric(out, ground_truth)[mask].mean()
 
                 elif config_dict['task'] in ['UnitCellPositionRegressionSAXS', 'UnitCellPositionRegressionXRD','UnitCellPositionRegressionxPDF']:
                     # Get prediction
                     out = forward_pass(data) # (B, X+Y+Z)
                     # Get ground truth by sorting and padding
-                    ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], config_dict['Model_config']['out_channels']).to(device=device)
-                    for i, x in enumerate(unbatch(data.y['unit_cell_pos_abs'], data.batch)):
+                    batch_size = torch.max(data.batch) + 1
+                    ground_truth = torch.zeros(batch_size, config_dict['Model_config']['out_channels']).to(device=device)
+
+                    # We cannot unbatch, since data.batch refers to the nanoparticle positions. Instead
+                    lidx = 0
+                    for i, size in enumerate(data.y['unit_cell_n_atoms']):
+                        # Extract the unit cell
+                        x = data.y['unit_cell_pos_frac'][lidx:size]
+                        lidx += size
+                        
                         # Sort according to norm
                         norms = torch.norm(x, p=2, dim=-1)
                         _, indices = torch.sort(norms, descending=False, dim=0)
                         x = x[indices]
 
-                        # Pad 
+                        # Pad
                         padding_size = config_dict['Model_config']['out_channels']//3 - x.size(0)
                         if padding_size > 0:
                             padding = torch.full((padding_size, x.size(1)), 100, dtype=x.dtype).to(device=device)
@@ -595,9 +642,9 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                         # Append
                         ground_truth[i] = x.T.flatten()
                         
-                        # mask out the padding
+                    # mask out the padding
                     mask = ground_truth < 100
-                    error += metric(out, ground_truth)[mask].mean(dim=-1)
+                    error += metric(out, ground_truth)[mask].mean()
         
         # Log training progress
         writer.add_scalar('Loss/train', train_loss, epoch)
@@ -739,21 +786,21 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 error += position_MAE(out, data.pos_abs)
             elif config_dict['task'] == 'SAXSRegression':
                 out = forward_pass(data)
-                ground_truth = data.y['saxs'][1,:]
+                ground_truth = data.saxs[1::2,:]
                 # Min-max normalize saxs data
-                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
+                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1, keepdim=True)[0]) / (torch.max(ground_truth, dim=-1, keepdim=True)[0] - torch.min(ground_truth, dim=-1, keepdim=True)[0])
                 error += metric(out, ground_truth)
             elif config_dict['task'] == 'XRDRegression':
                 out = forward_pass(data)
-                ground_truth = data.y['xrd'][1,:]
+                ground_truth = data.y['xrd'][1::2,:]
                 # Min-max normalize xrd data
-                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
+                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1, keepdim=True)[0]) / (torch.max(ground_truth, dim=-1, keepdim=True)[0] - torch.min(ground_truth, dim=-1, keepdim=True)[0])
                 error += metric(out, ground_truth)
             elif config_dict['task'] == 'xPDFRegression':
                 out = forward_pass(data)
-                ground_truth = data.y['xPDF'][1,:]
+                ground_truth = data.y['xPDF'][1::2,:]
                 # Min-max normalize xpdf data
-                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1)[0]) / (torch.max(ground_truth, dim=-1)[0] - torch.min(ground_truth, dim=-1)[0])
+                ground_truth = (ground_truth - torch.min(ground_truth, dim=-1, keepdim=True)[0]) / (torch.max(ground_truth, dim=-1, keepdim=True)[0] - torch.min(ground_truth, dim=-1, keepdim=True)[0])
                 error += metric(out, ground_truth)
             elif config_dict['task'] == 'DistanceRegression':
                 out = forward_pass(data)
@@ -764,28 +811,31 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                 # Get prediction
                 out = forward_pass(data)
                 # Get ground truth
-                ground_truth = data.y['cell_params']
+                ground_truth = data.y['cell_params'].reshape(torch.max(data.batch)+1,6)
                 # Calculate loss
                 error += metric(out, ground_truth) 
             elif config_dict['task'] in ['CrystalSystemClassificationSAXS','CrystalSystemClassificationXRD','CrystalSystemClassificationxPDF']:
                 # Get prediction
                 out = forward_pass(data)
                 # Get ground truth
-                ground_truth = data.y['crystal_system_number']
+                _, predicted = torch.max(out.data, 1)
+                ground_truth = torch.tensor(data.y['crystal_system_number'], device=device)
                 # Calculate loss
-                error += metric(out, ground_truth) 
+                MC_F1.update(predicted, ground_truth)
             elif config_dict['task'] in ['SpacegroupClassificationSAXS','SpacegroupClassificationXRD','SpacegroupClassificationxPDF']:
                 # Get prediction
                 out = forward_pass(data)
                 # Get ground truth
-                ground_truth = data.y['space_group_number']
+                _, predicted = torch.max(out.data, 1)
+                ground_truth = torch.tensor(data.y['space_group_number'], device=device)
                 # Calculate loss
-                error += metric(out, ground_truth) 
+                MC_F1.update(predicted, ground_truth)
             elif config_dict['task'] in ['AbsPositionRegressionSAXS', 'AbsPositionRegressionXRD', 'AbsPositionRegressionxPDF']:
                 # Get prediction
                 out = forward_pass(data) # (B, X+Y+Z)
                 # Get ground truth by sorting and padding
-                ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], config_dict['Model_config']['out_channels']).to(device=device)
+                batch_size = torch.max(data.batch) + 1
+                ground_truth = torch.zeros(batch_size, config_dict['Model_config']['out_channels']).to(device=device)
                 for i, x in enumerate(unbatch(data.pos_abs, data.batch)):
                     # Sort according to norm
                     norms = torch.norm(x, p=2, dim=-1)
@@ -800,22 +850,31 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
 
                     # Append
                     ground_truth[i] = x.T.flatten()
-
+                    
+                # mask out the padding
                 mask = ground_truth < 100
-                error += metric(out, ground_truth)[mask].mean(dim=-1)
+                error += metric(out, ground_truth)[mask].mean()
 
             elif config_dict['task'] in ['UnitCellPositionRegressionSAXS', 'UnitCellPositionRegressionXRD','UnitCellPositionRegressionxPDF']:
                 # Get prediction
                 out = forward_pass(data) # (B, X+Y+Z)
                 # Get ground truth by sorting and padding
-                ground_truth = torch.zeros(config_dict['Train_config']['batch_size'], config_dict['Model_config']['out_channels']).to(device=device)
-                for i, x in enumerate(unbatch(data.y['unit_cell_pos_abs'], data.batch)):
+                batch_size = torch.max(data.batch) + 1
+                ground_truth = torch.zeros(batch_size, config_dict['Model_config']['out_channels']).to(device=device)
+
+                # We cannot unbatch, since data.batch refers to the nanoparticle positions. Instead
+                lidx = 0
+                for i, size in enumerate(data.y['unit_cell_n_atoms']):
+                    # Extract the unit cell
+                    x = data.y['unit_cell_pos_frac'][lidx:size]
+                    lidx += size
+                    
                     # Sort according to norm
                     norms = torch.norm(x, p=2, dim=-1)
                     _, indices = torch.sort(norms, descending=False, dim=0)
                     x = x[indices]
 
-                    # Pad 
+                    # Pad
                     padding_size = config_dict['Model_config']['out_channels']//3 - x.size(0)
                     if padding_size > 0:
                         padding = torch.full((padding_size, x.size(1)), 100, dtype=x.dtype).to(device=device)
@@ -824,9 +883,9 @@ for i, seed in enumerate(config_dict['Train_config']['seeds']):
                     # Append
                     ground_truth[i] = x.T.flatten()
                     
-                    # mask out the padding
+                # mask out the padding
                 mask = ground_truth < 100
-                error += metric(out, ground_truth)[mask].mean(dim=-1)
+                error += metric(out, ground_truth)[mask].mean()
 
     if 'Classification' in config_dict['task']:
         test_error = torch.tensor(0)

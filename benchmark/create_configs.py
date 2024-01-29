@@ -4,7 +4,7 @@ import os
 ## Top level configuration
 
 # Models to test
-models = ['GCN', 'GAT', 'GIN', 'GraphSAGE', 'EdgeCNN', 'GraphUNet', 'PMLP', 'MLP']
+models = ['GCN', 'GAT', 'GIN', 'GraphSAGE', 'EdgeCNN', 'GraphUNet', 'PMLP', 'MLP', 'RandomClass', 'MostFrequentClass', 'Mean']
 
 # Path to datasets
 dataset_dir = 'dataset'
@@ -16,26 +16,41 @@ stratify_on = ['Crystal system (Number)', None]
 stratify_distribution = ['equal', None]
 
 # Directory to save results in
-save_dir = 'results'
+save_dir = 'results_final'
 
 # tasks to test
-prediction_tasks = [
-    'AtomClassification', 'PositionRegression', 'DistanceRegression', 
+classification_tasks = [
+    'AtomClassification',
     'CrystalSystemClassification', 'SpacegroupClassification',
-    'SAXSRegression', 'XRDRegression', 'xPDFRegression'
 ]
-generative_tasks = [
+
+regression_tasks = [
+    'PositionRegression', 'DistanceRegression',
+    'SAXSRegression', 'XRDRegression', 'xPDFRegression',
+]
+
+generative_position_tasks = [
     'AbsPositionRegressionSAXS', 'AbsPositionRegressionXRD', 'AbsPositionRegressionxPDF',
-    'UnitCellPositionRegressionSAXS', 'UnitCellPositionRegressionXRD', 'UnitCellPositionRegressionxPDF',
+    'UnitCellPositionRegressionSAXS', 'UnitCellPositionRegressionXRD', 'UnitCellPositionRegressionxPDF'
+]
+
+p2p_classification_tasks = [
     'CrystalSystemClassificationSAXS', 'CrystalSystemClassificationXRD', 'CrystalSystemClassificationxPDF',
     'SpacegroupClassificationSAXS', 'SpacegroupClassificationXRD', 'SpacegroupClassificationxPDF',
+]
+
+p2p_regression_tasks = [
     'CellParamsRegressionSAXS', 'CellParamsRegressionXRD', 'CellParamsRegressionxPDF'
 ]
+
+prediction_tasks = classification_tasks + regression_tasks
+generative_tasks = generative_position_tasks + p2p_classification_tasks + p2p_regression_tasks
+
 tasks = prediction_tasks + generative_tasks
 
 ## Training configuration
 
-learning_rate = 0.01
+learning_rate = 0.001
 batch_size = 16
 max_epochs = 1000
 training_time_seconds = 3600
@@ -82,9 +97,31 @@ for dataset_name, strategy, on, distribution in zip(dataset_names, split_strateg
             # MLP only for generative tasks
             if (model == 'MLP') and (task not in generative_tasks):
                 continue
+
             # Generative tasks only for MLP
             if (model != 'MLP') and (task in generative_tasks):
                 continue
+
+            # RandomClass
+            if model == 'RandomClass':
+                if task in generative_tasks:
+                    continue
+                elif task not in classification_tasks:
+                    continue
+
+            # MostFrequentClass
+            if model == 'MostFrequentClass':
+                if task in generative_tasks:
+                    continue
+                elif task not in classification_tasks:
+                    continue
+
+            # Mean
+            if model == 'Mean':
+                if task in classification_tasks:
+                    continue
+                elif task in p2p_classification_tasks:
+                    continue
 
             if task == 'AtomClassification':
                 input_channels = 3
@@ -143,6 +180,8 @@ for dataset_name, strategy, on, distribution in zip(dataset_names, split_strateg
 
             if task == 'SpacegroupClassification':
                 sec_output_channels = 230
+            elif task == 'CrystalSystemClassification':
+                sec_output_channels = 7
             elif task == 'SAXSRegression':
                 sec_output_channels = 300
             elif task == 'XRDRegression':
