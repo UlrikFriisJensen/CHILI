@@ -1,5 +1,6 @@
 #%% Imports
 import os, sys, math, torch, warnings
+import argparse
 from mendeleev import element
 from mendeleev.fetch import fetch_table
 from elements import elements
@@ -18,7 +19,6 @@ from ase.spacegroup import get_spacegroup
 from pymatgen.analysis.graphs import StructureGraph
 from pymatgen.analysis.local_env import CrystalNN
 from pymatgen.io.ase import AseAtomsAdaptor
-# from Code.simScatteringPatterns import simPDFs, cif_to_NP_GPU
 from debyecalculator import DebyeCalculator
 
 #%% Graph construction
@@ -354,11 +354,20 @@ def calc_dist(position_0, position_1):
     return np.sqrt((position_0[0] - position_1[0]) ** 2 + (position_0[1] - position_1[1]) ** 2 + (
             position_0[2] - position_1[2]) ** 2)
 
-def main():
-    h5C = h5Constructor('../Dataset/CIFs/Train', 'Test_out')
-    h5C.gen_h5s()
 
+def main(args):
+    
+    # Read paths from batch
+    with open(args.batch, 'r') as f:
+        file_paths = [line.strip() for line in f.readlines()]
+
+    # Generate h5s
+    gc = h5Constructor(save_dir = args.output, cif_paths=file_paths)
+    gc.gen_h5s(parallelize=False, device='cuda')
 
 if __name__ == "__main__":
-    main()
-
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--batch', '-b', required=True, type=str)
+    parser.add_argument('--output', '-o', required=True, type=str)
+    args = parser.parse_args()
+    main(args)
