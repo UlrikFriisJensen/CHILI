@@ -47,7 +47,11 @@ stats_cod['dataset'] = 'CHILI-COD'
 stats_combined = pd.concat([stats_sim, stats_cod], ignore_index=True)
 
 ####! Plotting
-print('Plotting...\n\n')
+print('Plotting:\n')
+
+# Set font size
+plt.rcParams.update({'font.size': 13})
+
 ##! Statistics
 
 # Set palette
@@ -69,7 +73,9 @@ ax.legend_.set_title(new_title)
 sns.move_legend(ax, loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
 # Axes
 ax.set_xlim(-0.5, 6.5)
-ax.set_xticks(ticks=[0,1,2,3,4,5,6], labels=['Triclinic', 'Monoclinic', 'Orthorhombic', 'Tetragonal', 'Trigonal', 'Hexagonal', 'Cubic'], rotation=45)
+ax.set_xticks(ticks=[0,2,4,6], labels=['Triclinic', 'Orthorhombic', 'Trigonal', 'Cubic'])#, rotation=45)
+ax.set_xticks(ticks=[1,3,5], labels=['Monoclinic', 'Tetragonal', 'Hexagonal'], minor=True)
+ax.tick_params(axis='x', which='minor', length=20, width=1)
 ax.set_xlabel('')
 ax.set_ylabel('Percentage of dataset')
 ax.set_yticks([0, 10, 20, 30, 40, 50, 60, 70, 80, 90], ['0%', '10%', '20%', '30%', '40%', '50%', '60%', '70%', '80%', '90%'])
@@ -90,7 +96,7 @@ ax.indicate_inset_zoom(ip)
 # Save
 plt.tight_layout()
 plt.savefig('./statistics_crystalSystem_comparison.pdf', format='pdf', dpi=300)
-print('✓\n\n')
+print('✓\n')
 
 print('Number of elements comparison...')
 # Histogram comparing the number of elements of the two datasets
@@ -122,7 +128,7 @@ ax.indicate_inset_zoom(ip)
 # Save
 plt.tight_layout()
 plt.savefig('./statistics_nElements_comparison.pdf', format='pdf', dpi=300)
-print('✓\n\n')
+print('✓\n')
 
 print('Crystal type in CHILI-SIM...')
 # Histogram showing the distribution of crystal types in CHILI-SIM
@@ -138,7 +144,7 @@ ax.set_ylim(0, 9.2)
 # Save
 plt.tight_layout()
 plt.savefig('./statistics_crystalType_sim.pdf', format='pdf', dpi=300)
-print('✓\n\n')
+print('✓\n')
 
 print('NP size comparison...')
 # Histogram comparing the distribution of NP sizes in the two datasets
@@ -156,7 +162,7 @@ ax.set_ylabel('Density')
 # Save
 plt.tight_layout()
 plt.savefig('./statistics_NPsize_comparison.pdf', format='pdf', dpi=300)
-print('✓\n\n')
+print('✓\n')
 
 ##! Periodic table figure
 print('Periodic table figure...')
@@ -269,6 +275,8 @@ for i in range(10):
             axs[i,j].set_facecolor(color_2)
         elif atom_numbers[atom_index] in elements_cod:
             axs[i,j].set_facecolor(color_1)
+        else:
+            axs[i,j].set_facecolor(plt.cm.tab20c(19))
         atom_index += 1
 # Fill in all lanthanides
 for i, (elm, num) in enumerate(zip(lanthanides, lanthanide_numbers)):
@@ -286,6 +294,8 @@ for i, (elm, num) in enumerate(zip(lanthanides, lanthanide_numbers)):
         axs[8,3+i].set_facecolor('tab:orange')
     elif num in elements_cod:
         axs[8,3+i].set_facecolor('tab:blue')
+    else:
+        axs[8,3+i].set_facecolor(plt.cm.tab20c(19))
 # Fill in all actinides
 for i, (elm, num) in enumerate(zip(actinides, actinide_numbers)):
     if i == 0:
@@ -302,6 +312,8 @@ for i, (elm, num) in enumerate(zip(actinides, actinide_numbers)):
         axs[9,3+i].set_facecolor('tab:orange')
     elif num in elements_cod:
         axs[9,3+i].set_facecolor('tab:blue')
+    else:
+        axs[9,3+i].set_facecolor(plt.cm.tab20c(19))
     
 # Remove axes from all blank subplots
 for i in range(18):
@@ -322,7 +334,7 @@ for i in range(3):
     
 # Color connection to lanthanides and actinides blue
 for i in range(5):
-    axs[5+i,2].set_facecolor(plt.cm.tab20(15))
+    axs[5+i,2].set_facecolor('darkgrey') # plt.cm.tab20(15)
 
 # Add annotations which indicate the groups on the periodic table
 axs[0,0].annotate('1', (0.5, 1.1), xycoords='axes fraction', va='center', ha='center', fontsize=14, fontweight='bold')
@@ -377,4 +389,4 @@ axs[1,10].annotate('Non-\nmetal', (0.5, 0.5), xycoords='axes fraction', va='cent
 # Save
 fig.tight_layout()
 fig.savefig('./periodicTable.pdf', format='pdf', dpi=300)
-print('✓\n\n')
+print('✓\n')
