@@ -52,14 +52,17 @@ print('Plotting...\n\n')
 
 # Set palette
 palette = sns.color_palette('tab10')
-color_dict = {'Train': palette[0], 'Validation': palette[1], 'Test': palette[2]}
-hue_order = ['Train', 'Validation', 'Test']
+color_dict_set = {'Train': palette[0], 'Validation': palette[1], 'Test': palette[2]}
+hue_order_set = ['Train', 'Validation', 'Test']
+color_dict_data = {'CHILI-SIM': palette[1], 'CHILI-COD': palette[0]}
+hue_order_data = ['CHILI-COD', 'CHILI-SIM']
+
 
 print('Crystal system comparison...')
 # Histogram comparing the crystal systems of the two datasets
 # Plot
 plt.figure(figsize=(6,5))
-ax = sns.histplot(data=stats_combined, x='Crystal system (Number)', hue='dataset', multiple='dodge', discrete=True, stat='percent', palette=palette, common_norm=False, shrink=0.9)
+ax = sns.histplot(data=stats_combined, x='Crystal system (Number)', hue='dataset', multiple='dodge', discrete=True, stat='percent', palette=color_dict_data, hue_order=hue_order_data, common_norm=False, shrink=0.9)
 # Legend
 new_title = 'Dataset'
 ax.legend_.set_title(new_title)
@@ -73,7 +76,7 @@ ax.set_yticks([0, 10, 20, 30, 40, 50, 60, 70, 80, 90], ['0%', '10%', '20%', '30%
 ax.set_ylim(0, 62)
 # Inset plot of the Hexagonal crystal system
 ip = ax.inset_axes([0.5,0.5,0.3,0.4])
-sns.histplot(data=stats_combined, x='Crystal system (Number)', hue='dataset', multiple='dodge', discrete=True, stat='percent', palette=palette, common_norm=False, ax=ip, shrink=0.9)
+sns.histplot(data=stats_combined, x='Crystal system (Number)', hue='dataset', multiple='dodge', discrete=True, stat='percent', palette=color_dict_data, hue_order=hue_order_data, common_norm=False, ax=ip, shrink=0.9)
 ip.set_xlim(4.5, 5.5)
 ip.set_ylim(0, 1)
 ip.set_xticks(ticks=[5], labels=['Hexagonal'])
@@ -93,7 +96,7 @@ print('Number of elements comparison...')
 # Histogram comparing the number of elements of the two datasets
 # Plot
 plt.figure(figsize=(6,5))
-ax = sns.histplot(data=stats_combined, x='# of elements', hue='dataset', multiple='dodge', discrete=True, stat='percent', palette=palette, common_norm=False, shrink=0.9)
+ax = sns.histplot(data=stats_combined, x='# of elements', hue='dataset', multiple='dodge', discrete=True, stat='percent', palette=color_dict_data, hue_order=hue_order_data, common_norm=False, shrink=0.9)
 # Legend
 new_title = 'Dataset'
 ax.legend_.set_title(new_title)
@@ -106,7 +109,7 @@ ax.set_yticks([0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100], ['0%', '10%', '20%',
 ax.set_ylim(0, 102)
 # Inset plot of 6 and 7 elements
 ip = ax.inset_axes([0.6,0.4,0.3,0.5])
-sns.histplot(data=stats_combined, x='# of elements', hue='dataset', multiple='dodge', discrete=True, stat='percent', palette=palette, common_norm=False, ax=ip, shrink=0.9)
+sns.histplot(data=stats_combined, x='# of elements', hue='dataset', multiple='dodge', discrete=True, stat='percent', palette=color_dict_data, hue_order=hue_order_data, common_norm=False, ax=ip, shrink=0.9)
 ip.set_xlim(5.5, 7.5)
 ip.set_ylim(0, 0.6)
 ip.set_yticks([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6], ['0.00%', '0.10%', '0.20%', '0.30%', '0.40%', '0.50%', '0.60%'])
@@ -141,7 +144,7 @@ print('NP size comparison...')
 # Histogram comparing the distribution of NP sizes in the two datasets
 # Plot
 plt.figure(figsize=(6,5))
-ax = sns.histplot(data=stats_combined, x='NP size (Å)', hue='dataset', multiple='layer', discrete=False, stat='density', palette=palette, common_norm=False, shrink=1, binwidth=0.1, binrange=(0,60), element='step')
+ax = sns.histplot(data=stats_combined, x='NP size (Å)', hue='dataset', multiple='layer', discrete=False, stat='density', palette=color_dict_data, hue_order=hue_order_data, common_norm=False, shrink=1, binwidth=0.1, binrange=(0,60), element='step')
 # Legend
 new_title = 'Dataset'
 ax.legend_.set_title(new_title)
