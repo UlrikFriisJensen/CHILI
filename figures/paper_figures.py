@@ -22,29 +22,29 @@ root = '../Dataset/'
 
 print('Loading datasets...\n\n')
 # Load datasets
-chili_sim = InOrgMatDatasets(root=root, dataset='CHILI-SIM')
-chili_cod = InOrgMatDatasets(root=root, dataset='CHILI-COD')
+chili_3k = InOrgMatDatasets(root=root, dataset='CHILI-3K')
+chili_100k = InOrgMatDatasets(root=root, dataset='CHILI-100K')
 
 # Read data splits
 try:
-    chili_sim.load_data_split()
-    chili_cod.load_data_split()
+    chili_3k.load_data_split()
+    chili_100k.load_data_split()
 except FileNotFoundError:
     # Create data splits
-    chili_sim.create_data_split()
-    chili_cod.create_data_split()
+    chili_3k.create_data_split()
+    chili_100k.create_data_split()
 
-    chili_sim.load_data_split()
-    chili_cod.load_data_split()
+    chili_3k.load_data_split()
+    chili_100k.load_data_split()
 
 # Get statistics
-stats_sim = chili_sim.get_statistics(return_dataframe=True)
-stats_cod = chili_cod.get_statistics(return_dataframe=True)
+stats_3k = chili_3k.get_statistics(return_dataframe=True)
+stats_100k = chili_100k.get_statistics(return_dataframe=True)
 
-stats_sim['dataset'] = 'CHILI-SIM'
-stats_cod['dataset'] = 'CHILI-COD'
+stats_3k['dataset'] = 'CHILI-3K'
+stats_100k['dataset'] = 'CHILI-100K'
 
-stats_combined = pd.concat([stats_sim, stats_cod], ignore_index=True)
+stats_combined = pd.concat([stats_3k, stats_100k], ignore_index=True)
 
 ####! Plotting
 print('Plotting:\n')
@@ -58,8 +58,8 @@ plt.rcParams.update({'font.size': 13})
 palette = sns.color_palette('tab10')
 color_dict_set = {'Train': palette[0], 'Validation': palette[1], 'Test': palette[2]}
 hue_order_set = ['Train', 'Validation', 'Test']
-color_dict_data = {'CHILI-SIM': palette[1], 'CHILI-COD': palette[0]}
-hue_order_data = ['CHILI-COD', 'CHILI-SIM']
+color_dict_data = {'CHILI-3K': palette[1], 'CHILI-100K': palette[0]}
+hue_order_data = ['CHILI-100K', 'CHILI-3K']
 
 
 print('Crystal system comparison...')
@@ -130,13 +130,13 @@ plt.tight_layout()
 plt.savefig('./statistics_nElements_comparison.pdf', format='pdf', dpi=300)
 print('✓\n')
 
-print('Crystal type in CHILI-SIM...')
-# Histogram showing the distribution of crystal types in CHILI-SIM
+print('Crystal type in CHILI-3K...')
+# Histogram showing the distribution of crystal types in CHILI-3K
 # Plot
 plt.figure(figsize=(6,5))
-ax = sns.histplot(data=stats_sim, x='Crystal type', discrete=True, stat='percent', color=palette[1], shrink=0.9)
+ax = sns.histplot(data=stats_3k, x='Crystal type', discrete=True, stat='percent', color=palette[1], shrink=0.9)
 # Axes
-ax.set_xticks(ticks=[0,1,2,3,4,5,6,7,8,9,10,11], labels=stats_sim['Crystal type'].unique(),rotation=90)
+ax.set_xticks(ticks=[0,1,2,3,4,5,6,7,8,9,10,11], labels=stats_3k['Crystal type'].unique(),rotation=90)
 ax.set_xlabel('')
 ax.set_ylabel('Percentage of dataset')
 ax.set_yticks([0, 1, 2, 3 ,4, 5, 6, 7, 8, 9], ['0%', '1%', '2%', '3%', '4%', '5%', '6%', '7%', '8%', '9%'])
@@ -167,17 +167,17 @@ print('✓\n')
 ##! Periodic table figure
 print('Periodic table figure...')
 
-# Elements in CHILI-SIM
+# Elements in CHILI-3K
 elements_sim = []
-for i in range(len(stats_sim)):
-    elements_sim.append(stats_sim['Elements'].to_numpy()[i][0])
-    elements_sim.append(stats_sim['Elements'].to_numpy()[i][1])
+for i in range(len(stats_3k)):
+    elements_sim.append(stats_3k['Elements'].to_numpy()[i][0])
+    elements_sim.append(stats_3k['Elements'].to_numpy()[i][1])
 elements_sim = np.unique(elements_sim)
 
-# Elements in CHILI-COD
+# Elements in CHILI-100K
 elements_cod = []
-for i in range(len(stats_cod)):
-    for elm in stats_cod['Elements'].to_numpy()[i]:
+for i in range(len(stats_100k)):
+    for elm in stats_100k['Elements'].to_numpy()[i]:
         elements_cod.append(elm)
 elements_cod = np.unique(elements_cod)
 
@@ -357,34 +357,34 @@ axs[1,16].annotate('17', (0.5, 1.1), xycoords='axes fraction', va='center', ha='
 axs[0,17].annotate('18', (0.5, 1.1), xycoords='axes fraction', va='center', ha='center', fontsize=12, fontweight='bold')
 
 # Add annotations to the top middle of the plot that show which dataset each color corresponds to
-# Show the color for CHILI-COD
-axs[1,3].axis('on')
-axs[1,3].set_facecolor('tab:blue')
+# Show the color for CHILI-100K
 axs[1,4].axis('on')
-axs[1,4].set_facecolor(plt.cm.tab20(1))
-axs[1,3].annotate('CHILI-COD', (1, 1.25), xycoords='axes fraction', va='center', ha='center', fontsize=16, fontweight='bold')
-axs[1,3].annotate('Metal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=12, fontweight='bold')
-axs[1,4].annotate('Non-\nmetal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=12, fontweight='bold')
+axs[1,4].set_facecolor('tab:blue')
+axs[1,5].axis('on')
+axs[1,5].set_facecolor(plt.cm.tab20(1))
+axs[1,4].annotate('CHILI-100K', (1, 1.25), xycoords='axes fraction', va='center', ha='center', fontsize=16, fontweight='bold')
+axs[1,4].annotate('Metal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=12, fontweight='bold')
+axs[1,5].annotate('Non-\nmetal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=12, fontweight='bold')
 
 # Show the color for both datasets
-axs[1,6].axis('on')
-axs[1,6].set_facecolor('tab:orange')
-axs[1,6].add_patch(plt.Rectangle((0, 0), 0.5, 1, color='tab:blue'))
-axs[1,7].axis('on')
-axs[1,7].set_facecolor(plt.cm.tab20(3))
-axs[1,7].add_patch(plt.Rectangle((0, 0), 0.5, 1, color=plt.cm.tab20(1)))
-axs[1,6].annotate('Both', (1, 1.25), xycoords='axes fraction', va='center', ha='center', fontsize=16, fontweight='bold')
-axs[1,6].annotate('Metal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=12, fontweight='bold')
-axs[1,7].annotate('Non-\nmetal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=12, fontweight='bold')
+#axs[1,6].axis('on')
+#axs[1,6].set_facecolor('tab:orange')
+#axs[1,6].add_patch(plt.Rectangle((0, 0), 0.5, 1, color='tab:blue'))
+#axs[1,7].axis('on')
+#axs[1,7].set_facecolor(plt.cm.tab20(3))
+#axs[1,7].add_patch(plt.Rectangle((0, 0), 0.5, 1, color=plt.cm.tab20(1)))
+#axs[1,6].annotate('Both', (1, 1.25), xycoords='axes fraction', va='center', ha='center', fontsize=16, fontweight='bold')
+#axs[1,6].annotate('Metal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=12, fontweight='bold')
+#axs[1,7].annotate('Non-\nmetal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=12, fontweight='bold')
 
-# Show the color for CHILI-SIM
+# Show the color for CHILI-3K
+axs[1,8].axis('on')
+axs[1,8].set_facecolor('tab:orange')
 axs[1,9].axis('on')
-axs[1,9].set_facecolor('tab:orange')
-axs[1,10].axis('on')
-axs[1,10].set_facecolor(plt.cm.tab20(3))
-axs[1,9].annotate('CHILI-SIM', (1, 1.25), xycoords='axes fraction', va='center', ha='center', fontsize=16, fontweight='bold')
-axs[1,9].annotate('Metal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=12, fontweight='bold')
-axs[1,10].annotate('Non-\nmetal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=12, fontweight='bold')
+axs[1,9].set_facecolor(plt.cm.tab20(3))
+axs[1,8].annotate('CHILI-3K', (1, 1.25), xycoords='axes fraction', va='center', ha='center', fontsize=16, fontweight='bold')
+axs[1,8].annotate('Metal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=12, fontweight='bold')
+axs[1,9].annotate('Non-\nmetal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=12, fontweight='bold')
 
 # Save
 fig.tight_layout()
