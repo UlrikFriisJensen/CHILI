@@ -172,5 +172,7 @@ benchmark/configs/
 generation/generated_data/
 generation/*_batches/
 Dataset/
+*.code-workspace
+functionTesting.ipynb
 
 
