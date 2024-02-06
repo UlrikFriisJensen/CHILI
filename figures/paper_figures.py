@@ -95,7 +95,7 @@ ip.legend_.remove()
 ax.indicate_inset_zoom(ip)
 # Save
 plt.tight_layout()
-plt.savefig('./statistics_crystalSystem_comparison.pdf', format='pdf', dpi=300)
+plt.savefig('./statistics_crystalSystem_comparison.pdf', format='pdf', dpi=300, bbox_inches='tight')
 print('✓\n')
 
 print('Number of elements comparison...')
@@ -127,7 +127,7 @@ ip.legend_.remove()
 ax.indicate_inset_zoom(ip)
 # Save
 plt.tight_layout()
-plt.savefig('./statistics_nElements_comparison.pdf', format='pdf', dpi=300)
+plt.savefig('./statistics_nElements_comparison.pdf', format='pdf', dpi=300, bbox_inches='tight')
 print('✓\n')
 
 print('Crystal type in CHILI-3K...')
@@ -143,7 +143,7 @@ ax.set_yticks([0, 1, 2, 3 ,4, 5, 6, 7, 8, 9], ['0%', '1%', '2%', '3%', '4%', '5%
 ax.set_ylim(0, 9.2)
 # Save
 plt.tight_layout()
-plt.savefig('./statistics_crystalType_sim.pdf', format='pdf', dpi=300)
+plt.savefig('./statistics_crystalType_sim.pdf', format='pdf', dpi=300, bbox_inches='tight')
 print('✓\n')
 
 print('NP size comparison...')
@@ -161,7 +161,7 @@ ax.set_xlabel('Nanoparticle size (Å)')
 ax.set_ylabel('Density')
 # Save
 plt.tight_layout()
-plt.savefig('./statistics_NPsize_comparison.pdf', format='pdf', dpi=300)
+plt.savefig('./statistics_NPsize_comparison.pdf', format='pdf', dpi=300, bbox_inches='tight')
 print('✓\n')
 
 ##! Periodic table figure
@@ -256,7 +256,7 @@ for i in range(10):
         # Write atomic number in upper left corner of subplot
         axs[i,j].annotate(f'{atom_numbers[atom_index]}', (0.05, 0.93), xycoords='axes fraction', va='top', ha='left', fontsize=16)
         # Write atomic symbol in center of subplot
-        axs[i,j].annotate(f'{elements[atom_index]}', (0.5, 0.35), xycoords='axes fraction', va='center', ha='center', fontsize=28, fontweight='bold')
+        axs[i,j].annotate(f'{elements[atom_index]}', (0.5, 0.35), xycoords='axes fraction', va='center', ha='center', fontsize=28)#, fontweight='bold')
         
         # Set the opacity of the background color based on if it is a ligans or not
         if atom_numbers[atom_index] in non_metals:
@@ -284,7 +284,7 @@ for i, (elm, num) in enumerate(zip(lanthanides, lanthanide_numbers)):
         # Label the periods
         axs[8,3+i].annotate('6', (-0.1,0.5), xycoords='axes fraction', va='center', ha='right', fontsize=18, fontweight='bold')
     axs[8,3+i].annotate(f'{num}', (0.05, 0.93), xycoords='axes fraction', va='top', ha='left', fontsize=14)
-    axs[8,3+i].annotate(f'{elm}', (0.5, 0.35), xycoords='axes fraction', va='center', ha='center', fontsize=28, fontweight='bold')
+    axs[8,3+i].annotate(f'{elm}', (0.5, 0.35), xycoords='axes fraction', va='center', ha='center', fontsize=28)#, fontweight='bold')
     # Color the background of the subplot
     if num in elements_100k and num in elements_3k:
         axs[8,3+i].set_facecolor('tab:orange')
@@ -302,7 +302,7 @@ for i, (elm, num) in enumerate(zip(actinides, actinide_numbers)):
         # Label the periods
         axs[9,3+i].annotate('7', (-0.1,0.5), xycoords='axes fraction', va='center', ha='right', fontsize=18, fontweight='bold')
     axs[9,3+i].annotate(f'{num}', (0.05, 0.93), xycoords='axes fraction', va='top', ha='left', fontsize=14)
-    axs[9,3+i].annotate(f'{elm}', (0.5, 0.35), xycoords='axes fraction', va='center', ha='center', fontsize=28, fontweight='bold')
+    axs[9,3+i].annotate(f'{elm}', (0.5, 0.35), xycoords='axes fraction', va='center', ha='center', fontsize=28)#, fontweight='bold')
     # Color the background of the subplot
     if num in elements_100k and num in elements_3k:
         axs[9,3+i].set_facecolor('tab:orange')
@@ -388,5 +388,5 @@ axs[1,9].annotate('Non-\nmetal', (0.5, 0.5), xycoords='axes fraction', va='cente
 
 # Save
 fig.tight_layout()
-fig.savefig('./periodicTable.pdf', format='pdf', dpi=300)
+fig.savefig('./periodicTable.pdf', format='pdf', dpi=300, bbox_inches='tight')
 print('✓\n')
