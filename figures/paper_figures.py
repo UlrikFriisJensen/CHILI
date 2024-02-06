@@ -223,6 +223,12 @@ actinide_numbers = [89, 90, 91, 92, 93, 94, 95, 96, 97,
                     98, 99, 100, 101, 102, 103]
 
 # Plot
+# Text sizes
+element_size = 26
+number_size = 16
+period_size = 18
+
+
 # 10 x 18 subplots with no whitespace and no axes
 fig, axs = plt.subplots(10, 18, figsize=(18, 10), sharex=True, sharey=True, gridspec_kw=dict(wspace=0, hspace=0), subplot_kw=dict(xticks=[], yticks=[]))
 
@@ -234,7 +240,7 @@ for i in range(10):
     for j in range(18):
         if j == 0 and i < 7:
             # Label the periods
-            axs[i,j].annotate(f'{i+1}', (-0.1,0.5), xycoords='axes fraction', va='center', ha='right', fontsize=18, fontweight='bold')
+            axs[i,j].annotate(f'{i+1}', (-0.1,0.5), xycoords='axes fraction', va='center', ha='right', fontsize=period_size, fontweight='bold')
         elif i == 0 and 1 <= j <= 16:
             # Remove the top row of the periodic table
             axs[i,j].axis('off')
@@ -254,9 +260,9 @@ for i in range(10):
             # axs[i,j].axis('off')
             continue
         # Write atomic number in upper left corner of subplot
-        axs[i,j].annotate(f'{atom_numbers[atom_index]}', (0.05, 0.93), xycoords='axes fraction', va='top', ha='left', fontsize=16)
+        axs[i,j].annotate(f'{atom_numbers[atom_index]}', (0.05, 0.93), xycoords='axes fraction', va='top', ha='left', fontsize=number_size)
         # Write atomic symbol in center of subplot
-        axs[i,j].annotate(f'{elements[atom_index]}', (0.5, 0.35), xycoords='axes fraction', va='center', ha='center', fontsize=28)#, fontweight='bold')
+        axs[i,j].annotate(f'{elements[atom_index]}', (0.5, 0.35), xycoords='axes fraction', va='center', ha='center', fontsize=element_size)
         
         # Set the opacity of the background color based on if it is a ligans or not
         if atom_numbers[atom_index] in non_metals:
@@ -282,9 +288,9 @@ for i in range(10):
 for i, (elm, num) in enumerate(zip(lanthanides, lanthanide_numbers)):
     if i == 0:
         # Label the periods
-        axs[8,3+i].annotate('6', (-0.1,0.5), xycoords='axes fraction', va='center', ha='right', fontsize=18, fontweight='bold')
-    axs[8,3+i].annotate(f'{num}', (0.05, 0.93), xycoords='axes fraction', va='top', ha='left', fontsize=14)
-    axs[8,3+i].annotate(f'{elm}', (0.5, 0.35), xycoords='axes fraction', va='center', ha='center', fontsize=28)#, fontweight='bold')
+        axs[8,3+i].annotate('6', (-0.1,0.5), xycoords='axes fraction', va='center', ha='right', fontsize=period_size, fontweight='bold')
+    axs[8,3+i].annotate(f'{num}', (0.05, 0.93), xycoords='axes fraction', va='top', ha='left', fontsize=number_size)
+    axs[8,3+i].annotate(f'{elm}', (0.5, 0.35), xycoords='axes fraction', va='center', ha='center', fontsize=element_size)
     # Color the background of the subplot
     if num in elements_100k and num in elements_3k:
         axs[8,3+i].set_facecolor('tab:orange')
@@ -300,9 +306,9 @@ for i, (elm, num) in enumerate(zip(lanthanides, lanthanide_numbers)):
 for i, (elm, num) in enumerate(zip(actinides, actinide_numbers)):
     if i == 0:
         # Label the periods
-        axs[9,3+i].annotate('7', (-0.1,0.5), xycoords='axes fraction', va='center', ha='right', fontsize=18, fontweight='bold')
-    axs[9,3+i].annotate(f'{num}', (0.05, 0.93), xycoords='axes fraction', va='top', ha='left', fontsize=14)
-    axs[9,3+i].annotate(f'{elm}', (0.5, 0.35), xycoords='axes fraction', va='center', ha='center', fontsize=28)#, fontweight='bold')
+        axs[9,3+i].annotate('7', (-0.1,0.5), xycoords='axes fraction', va='center', ha='right', fontsize=period_size, fontweight='bold')
+    axs[9,3+i].annotate(f'{num}', (0.05, 0.93), xycoords='axes fraction', va='top', ha='left', fontsize=number_size)
+    axs[9,3+i].annotate(f'{elm}', (0.5, 0.35), xycoords='axes fraction', va='center', ha='center', fontsize=element_size)
     # Color the background of the subplot
     if num in elements_100k and num in elements_3k:
         axs[9,3+i].set_facecolor('tab:orange')
@@ -337,24 +343,24 @@ for i in range(5):
     axs[5+i,2].set_facecolor('darkgrey') # plt.cm.tab20(15)
 
 # Add annotations which indicate the groups on the periodic table
-axs[0,0].annotate('1', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[1,1].annotate('2', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[3,2].annotate('3', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[3,3].annotate('4', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[3,4].annotate('5', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[3,5].annotate('6', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[3,6].annotate('7', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[3,7].annotate('8', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[3,8].annotate('9', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[3,9].annotate('10', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[3,10].annotate('11', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[3,11].annotate('12', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[1,12].annotate('13', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[1,13].annotate('14', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[1,14].annotate('15', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[1,15].annotate('16', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[1,16].annotate('17', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
-axs[0,17].annotate('18', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=18, fontweight='bold')
+axs[0,0].annotate('1', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[1,1].annotate('2', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[3,2].annotate('3', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[3,3].annotate('4', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[3,4].annotate('5', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[3,5].annotate('6', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[3,6].annotate('7', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[3,7].annotate('8', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[3,8].annotate('9', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[3,9].annotate('10', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[3,10].annotate('11', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[3,11].annotate('12', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[1,12].annotate('13', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[1,13].annotate('14', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[1,14].annotate('15', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[1,15].annotate('16', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[1,16].annotate('17', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
+axs[0,17].annotate('18', (0.5, 1.15), xycoords='axes fraction', va='center', ha='center', fontsize=period_size, fontweight='bold')
 
 # Add annotations to the top middle of the plot that show which dataset each color corresponds to
 # Show the color for CHILI-3K
