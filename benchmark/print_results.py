@@ -55,7 +55,11 @@ def main(results_dir, fstring_format='.3f'):
     # row_order = ['RandomClass', 'MostFrequentClass', 'Mean', 'GCN', 'PMLP', 'GraphSAGE', 'GAT', 'GraphUNet', 'GIN', 'EdgeCNN']
     
     # Create and save the LaTeX table
-    property_df.pivot_table(index=['Dataset', 'Model'], columns='Task', values='Test metric', aggfunc=custom_aggfunc).reindex(column_order, axis=1).to_latex(f'./{results_dir}/propertyPredictionTasksTable.tex', column_format='lccccccccc')
+    property_df.pivot_table(index=['Dataset', 'Model'], columns='Task', values='Test metric', aggfunc=custom_aggfunc, fill_value='---').reindex(column_order, axis=1).to_latex(f'./{results_dir}/propertyPredictionTasksTable.tex', column_format='lccccccccc')
+    
+    # Create and save LaTeX table with model parameters
+    row_order = ['GCN', 'PMLP', 'GraphSAGE', 'GAT', 'GraphUNet', 'GIN', 'EdgeCNN']
+    property_df.pivot_table(index=['Model'], values='Trainable parameters', fill_value=0, aggfunc=pd.Series.mode).reindex(row_order, axis=0).to_latex(f'./{results_dir}/ModelParametersTable.tex', column_format='lc')
     
     ### Structure dataframe
     # Convert the 'Dataset' column to categorical data types

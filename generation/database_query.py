@@ -8,6 +8,8 @@ from multiprocessing import Pool, cpu_count
 from itertools import islice, repeat
 from tqdm.auto import tqdm
 import argparse
+from elements import elements
+import pandas as pd
 
 #%% Functions
 
@@ -21,6 +23,67 @@ def batched(iterable, n):
             return
         yield batch
 
+def queryCODIDs(input_tuple):
+    (included_atoms, excluded_atoms), max_volume = input_tuple
+
+    id_url = 'https://www.crystallography.net/cod/result?format=lst'
+    if included_atoms:
+        for i, included_atom in enumerate(included_atoms):
+            id_url += f'&el{i+1}={included_atom}'
+    if excluded_atoms:
+        for i, excluded_atom in enumerate(excluded_atoms):
+            id_url += f'&nel{i+1}={excluded_atom}'
+    if max_volume:
+        id_url += f'&vmax={max_volume}'
+    
+    id_response = requests.get(id_url)
+
+    return id_response.text.split('\n')
+
+def getCODIDs(file_path='./COD_subset_IDs.csv'):
+    # Define metals
+    metals = [atom.Symbol for atom in elements.Alkali_Metals] 
+    metals += [atom.Symbol for atom in elements.Alkaline_Earth_Metals] 
+    metals += [atom.Symbol for atom in elements.Transition_Metals] 
+    metals += [atom.Symbol for atom in elements.Metalloids] 
+    metals += [atom.Symbol for atom in elements.Others] # Post-transition metals
+    metals += ['La', 'Ce', 'Pr', 'Nd', 'Pm', 'Sm', 'Eu', 'Gd', 'Tb',
+            'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu'] # Lanthanides
+
+    # Remove elements that does not have a well defined radius or are rare in nanoparticles
+    unwanted_elements = ['Fr', 'Po', 'Rf', 'Db', 'Sg', 'Bh', 'Hs', 'Mt', 'Uub', 'Uun', 'Uuu']
+    for elm in unwanted_elements:
+        metals.remove(elm)
+
+    # Define non-metals
+    non_metals = [atom.Symbol for atom in elements.Non_Metals]
+    non_metals += [atom.Symbol for atom in elements.Halogens]
+    non_metals.remove('At')
+    
+    # Find all possible two element combinations of metals and non-metals
+    combinations = []
+    for metal in metals:
+        for non_metal in non_metals:
+            combinations.append(([metal, non_metal], []))
+    # All metals without any non-metals
+    for metal in metals:
+        combinations.append(([metal], non_metals))
+        
+    # Query COD for IDs
+    inputs = zip(combinations, repeat(1000))
+    id_list = []
+    with Pool(processes=cpu_count()-1) as pool:
+        with tqdm(total=len(combinations), desc='Querying COD') as pbar:
+            for returned_ids in pool.imap_unordered(queryCODIDs, inputs, chunksize=1):
+                id_list.extend(returned_ids)
+                pbar.update()
+    
+    # Remove duplicate IDs
+    df_ids = pd.DataFrame(id_list)
+    df_ids = df_ids.drop_duplicates()
+    # Save IDs to file
+    df_ids.to_csv(file_path, index=False, header=False)
+    
 def downloadFromCOD(input_tuple):
     id_batch, save_folder, batch_size = input_tuple
     try:
@@ -94,18 +157,22 @@ def queryCOD(save_folder, included_atoms=None, excluded_atoms=None, batch_size=8
 if __name__ == '__main__':
     from cif_cleaning import cif_cleaning_pipeline
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--include', nargs ='*', type=str)
-    parser.add_argument('-e', '--exclude', nargs ='*', type=str)
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('-i', '--include', nargs ='*', type=str)
+    # parser.add_argument('-e', '--exclude', nargs ='*', type=str)
+    # args = parser.parse_args()
     
-    included_atoms = args.include #None if len(args.include) < 1 else args.include
-    excluded_atoms = args.exclude #None if len(args.exclude) < 1 else args.exclude
+    # included_atoms = args.include 
+    # excluded_atoms = args.exclude 
     
     cif_folder = '../Dataset/CIFs/COD_subset/'
-    #included_atoms = ['Pd'] #None
-    #excluded_atoms = ['C']
+    id_file = './COD_subset_IDs.csv'
     
-    #queryCOD(cif_folder, included_atoms=included_atoms, excluded_atoms=excluded_atoms)
+    # Get CIF IDs
+    getCODIDs(file_path=id_file)
     
+    # Download CIFs
+    queryCOD(cif_folder, id_file=id_file)
+    
+    # Clean CIFs
     cif_cleaning_pipeline(cif_folder, chunksize=100)

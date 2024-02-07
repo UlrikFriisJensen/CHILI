@@ -1,4 +1,4 @@
-##! Imports
+#%% Imports
 from pathlib import Path
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -17,7 +17,7 @@ from benchmark.dataset_class import InOrgMatDatasets
 # Mute warnings
 warnings.simplefilter(action='ignore')
 
-##! Setup
+#%% Setup
 root = '../Dataset/'
 
 print('Loading datasets...\n\n')
@@ -46,13 +46,13 @@ stats_100k['dataset'] = 'CHILI-100K'
 
 stats_combined = pd.concat([stats_3k, stats_100k], ignore_index=True)
 
-####! Plotting
+#%% Plotting
 print('Plotting:\n')
 
 # Set font size
 plt.rcParams.update({'font.size': 13})
 
-##! Statistics
+#%% Statistics
 
 # Set palette
 palette = sns.color_palette('tab10')
@@ -61,9 +61,8 @@ hue_order_set = ['Train', 'Validation', 'Test']
 color_dict_data = {'CHILI-3K': palette[0], 'CHILI-100K': palette[1]}
 hue_order_data = ['CHILI-3K', 'CHILI-100K']
 
-
+#%% Histogram comparing the crystal systems of the two datasets
 print('Crystal system comparison...')
-# Histogram comparing the crystal systems of the two datasets
 # Plot
 plt.figure(figsize=(6,5))
 ax = sns.histplot(data=stats_combined, x='Crystal system (Number)', hue='dataset', multiple='dodge', discrete=True, stat='percent', palette=color_dict_data, hue_order=hue_order_data, common_norm=False, shrink=0.9)
@@ -98,8 +97,8 @@ plt.tight_layout()
 plt.savefig('./statistics_crystalSystem_comparison.pdf', format='pdf', dpi=300, bbox_inches='tight')
 print('✓\n')
 
+#%% Histogram comparing the number of elements of the two datasets
 print('Number of elements comparison...')
-# Histogram comparing the number of elements of the two datasets
 # Plot
 plt.figure(figsize=(6,5))
 ax = sns.histplot(data=stats_combined, x='# of elements', hue='dataset', multiple='dodge', discrete=True, stat='percent', palette=color_dict_data, hue_order=hue_order_data, common_norm=False, shrink=0.9)
@@ -146,8 +145,8 @@ plt.tight_layout()
 plt.savefig('./statistics_crystalType_sim.pdf', format='pdf', dpi=300, bbox_inches='tight')
 print('✓\n')
 
+#%% Histogram comparing the distribution of NP sizes in the two datasets
 print('NP size comparison...')
-# Histogram comparing the distribution of NP sizes in the two datasets
 # Plot
 plt.figure(figsize=(6,5))
 ax = sns.histplot(data=stats_combined, x='NP size (Å)', hue='dataset', multiple='layer', discrete=False, stat='density', palette=color_dict_data, hue_order=hue_order_data, common_norm=False, shrink=1, binwidth=0.1, binrange=(0,60), element='step')
@@ -164,7 +163,7 @@ plt.tight_layout()
 plt.savefig('./statistics_NPsize_comparison.pdf', format='pdf', dpi=300, bbox_inches='tight')
 print('✓\n')
 
-##! Periodic table figure
+#%% Periodic table figure
 print('Periodic table figure...')
 
 # Elements in CHILI-3K
