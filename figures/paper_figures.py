@@ -400,7 +400,7 @@ ax.set_xticks(ticks=[0,2,4,6], labels=['Triclinic', 'Orthorhombic', 'Trigonal', 
 ax.set_xticks(ticks=[1,3,5], labels=['Monoclinic', 'Tetragonal', 'Hexagonal'], minor=True)
 ax.tick_params(axis='x', which='minor', length=20, width=1)
 ax.set_xlabel('')
-ax.set_ylabel('Percentage of dataset')
+ax.set_ylabel('Percentage of subset')
 ax.set_yticks([0, 5, 10, 15, 20], ['0%', '5%', '10%', '15%', '20%'])
 ax.set_ylim(0, 16)
 # Save
