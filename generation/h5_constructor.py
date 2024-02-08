@@ -90,7 +90,7 @@ class h5Constructor():
                 return
         
         # Find space group
-        space_group = get_spacegroup(unit_cell, symprec=1e-4)
+        space_group = get_spacegroup(unit_cell, symprec=1e-3)
 
         # Find corresponding crystal system
         crystal_system = 'Unknown'
