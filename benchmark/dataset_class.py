@@ -212,7 +212,7 @@ class InOrgMatDatasets(Dataset):
             raise ValueError('Split not recognized. Please use either "train", "validation" or "test"')
         return data
     
-    def create_data_split(self, test_size=0.1, validation_size=None, split_strategy='random', stratify_on='Space group (Number)', stratify_distribution='match', random_state=42, return_idx=False):
+    def create_data_split(self, test_size=0.1, validation_size=None, split_strategy='random', stratify_on='Space group (Number)', stratify_distribution='match', n_sample_per_class='max', random_state=42, return_idx=False):
         '''
         Split the dataset into train, validation and test sets. The indices of the split are saved to csv files in the processed directory.
         '''
@@ -255,8 +255,13 @@ class InOrgMatDatasets(Dataset):
                 df_stats[f'{split_strategy.capitalize()} data split ({stratify_on})'].loc[validation_idx] = 'Validation'
                 df_stats[f'{split_strategy.capitalize()} data split ({stratify_on})'].loc[test_idx] = 'Test'   
             elif stratify_distribution == 'equal':
-                # Find the class with the least number of samples
-                min_samples = df_stats[stratify_on].value_counts().min()
+                if n_sample_per_class == 'max':
+                    # Find the class with the least number of samples
+                    min_samples = df_stats[stratify_on].value_counts().min()
+                elif isinstance(n_sample_per_class, int):
+                    min_samples = n_sample_per_class
+                else:
+                    raise ValueError('n_sample_per_class not recognized. Please use either "max" or an integer')
                 # Randomly sample the same number of samples from each class
                 subset_idx = []
                 for group in df_stats[stratify_on].unique():
