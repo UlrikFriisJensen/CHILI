@@ -20,6 +20,9 @@ from torch_geometric.utils import to_networkx
 from networkx.algorithms.components import is_connected
 from sklearn.model_selection import train_test_split
 
+from ase import Atoms
+from ase.spacegroup import get_spacegroup
+
 #%% Dataset Class
 
 class InOrgMatDatasets(Dataset):
@@ -110,7 +113,7 @@ class InOrgMatDatasets(Dataset):
                 unit_cell_edge_attr = torch.tensor(h5f['UnitCellGraph']['EdgeFeatures'][:], dtype=torch.float32)
                 unit_cell_pos_abs = torch.tensor(h5f['UnitCellGraph']['AbsoluteCoordinates'][:], dtype=torch.float32)
                 unit_cell_pos_frac = torch.tensor(h5f['UnitCellGraph']['FractionalCoordinates'][:], dtype=torch.float32)
-                # Read other labels
+                # Read other labels                
                 cell_params = torch.tensor(h5f['GlobalLabels']['CellParameters'][:], dtype=torch.float32)
                 atomic_species = torch.tensor(h5f['GlobalLabels']['ElementsPresent'][:], dtype=torch.float32)
                 crystal_type = h5f['GlobalLabels']['CrystalType'][()].decode()
@@ -118,7 +121,6 @@ class InOrgMatDatasets(Dataset):
                 space_group_number = h5f['GlobalLabels']['SpaceGroupNumber'][()]
                 crystal_system = h5f['GlobalLabels']['CrystalSystem'][()].decode()
                 crystal_system_number = self.crystal_system_to_number(crystal_system)
-
                 # Read scattering data
                 for key in h5f['DiscreteParticleGraphs'].keys():
                         
