@@ -79,6 +79,8 @@ ax.set_xlabel('')
 ax.set_ylabel('Percentage of dataset')
 ax.set_yticks([0, 10, 20, 30, 40, 50, 60, 70, 80, 90], ['0%', '10%', '20%', '30%', '40%', '50%', '60%', '70%', '80%', '90%'])
 ax.set_ylim(0, 62)
+# Place a) in the top left corner
+ax.annotate('a)', (0.04, 0.96), xycoords='axes fraction', va='top', ha='left', fontsize=18, fontweight='bold')
 # Save
 plt.tight_layout()
 plt.savefig('./statistics_crystalSystem_comparison.pdf', format='pdf', dpi=300, bbox_inches='tight')
@@ -111,6 +113,8 @@ ip.set_title('')
 ip.set_facecolor('white')
 ip.legend_.remove()
 ax.indicate_inset_zoom(ip)
+# Place b) in the top left corner
+ax.annotate('b)', (0.04, 0.96), xycoords='axes fraction', va='top', ha='left', fontsize=18, fontweight='bold')
 # Save
 plt.tight_layout()
 plt.savefig('./statistics_nElements_comparison.pdf', format='pdf', dpi=300, bbox_inches='tight')
@@ -145,6 +149,8 @@ sns.move_legend(ax, loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2)
 ax.set_xlim(0, 60)
 ax.set_xlabel('Nanoparticle size (Å)')
 ax.set_ylabel('Density')
+# Place c) in the top left corner
+ax.annotate('c)', (0.04, 0.96), xycoords='axes fraction', va='top', ha='left', fontsize=18, fontweight='bold')
 # Save
 plt.tight_layout()
 plt.savefig('./statistics_NPsize_comparison.pdf', format='pdf', dpi=300, bbox_inches='tight')
