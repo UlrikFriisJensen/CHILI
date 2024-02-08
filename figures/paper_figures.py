@@ -120,7 +120,7 @@ print('Crystal type in CHILI-3K...')
 # Histogram showing the distribution of crystal types in CHILI-3K
 # Plot
 plt.figure(figsize=(6,5))
-ax = sns.histplot(data=stats_3k, x='Crystal type', discrete=True, stat='percent', color=palette[1], shrink=0.9)
+ax = sns.histplot(data=stats_3k, x='Crystal type', discrete=True, stat='percent', color=palette[0], shrink=0.9)
 # Axes
 ax.set_xticks(ticks=[0,1,2,3,4,5,6,7,8,9,10,11], labels=stats_3k['Crystal type'].unique(),rotation=90)
 ax.set_xlabel('')
@@ -358,17 +358,6 @@ axs[1,4].annotate('CHILI-3K', (1, 1.25), xycoords='axes fraction', va='center', 
 axs[1,4].annotate('Metal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=16, fontweight='bold')
 axs[1,5].annotate('Non-\nmetal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=16, fontweight='bold')
 
-# Show the color for both datasets
-#axs[1,6].axis('on')
-#axs[1,6].set_facecolor('tab:orange')
-#axs[1,6].add_patch(plt.Rectangle((0, 0), 0.5, 1, color='tab:blue'))
-#axs[1,7].axis('on')
-#axs[1,7].set_facecolor(plt.cm.tab20(3))
-#axs[1,7].add_patch(plt.Rectangle((0, 0), 0.5, 1, color=plt.cm.tab20(1)))
-#axs[1,6].annotate('Both', (1, 1.25), xycoords='axes fraction', va='center', ha='center', fontsize=16, fontweight='bold')
-#axs[1,6].annotate('Metal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=12, fontweight='bold')
-#axs[1,7].annotate('Non-\nmetal', (0.5, 0.5), xycoords='axes fraction', va='center', ha='center', fontsize=12, fontweight='bold')
-
 # Show the color for CHILI-100K
 axs[1,8].axis('on')
 axs[1,8].set_facecolor('tab:orange')
@@ -381,4 +370,72 @@ axs[1,9].annotate('Non-\nmetal', (0.5, 0.5), xycoords='axes fraction', va='cente
 # Save
 fig.tight_layout()
 fig.savefig('./periodicTable.pdf', format='pdf', dpi=300, bbox_inches='tight')
+print('✓\n')
+
+#%% Plots for CHILI-100K subset
+
+# Read data split
+try:
+    chili_100k.load_data_split(split_strategy='stratified', stratify_on='Crystal system (Number)', stratify_distribution='equal')
+except FileNotFoundError:
+    # Create data splits
+    chili_100k.create_data_split(split_strategy='stratified', stratify_on='Crystal system (Number)', stratify_distribution='equal', n_sample_per_class=425)
+
+    chili_100k.load_data_split(split_strategy='stratified', stratify_on='Crystal system (Number)', stratify_distribution='equal')
+    
+stats_100k_subset = chili_100k.get_statistics(return_dataframe=True)
+
+#%% Crystal system distribution in CHILI-100K subset
+print('Crystal system distribution in CHILI-100K subset...')
+# Plot
+plt.figure(figsize=(6,5))
+ax = sns.histplot(data=stats_100k_subset, x='Crystal system (Number)', discrete=True, stat='percent', common_norm=True, shrink=0.9, hue='Stratified data split (Crystal system (Number), Equal classes)', palette=color_dict_set, hue_order=hue_order_set, multiple='stack')#, color=palette[1])
+# Legend
+new_title = 'Data split'
+ax.legend_.set_title(new_title)
+sns.move_legend(ax, loc='lower center', bbox_to_anchor=(0.5, 1), ncol=3)
+# Axes
+ax.set_xlim(-0.5, 6.5)
+ax.set_xticks(ticks=[0,2,4,6], labels=['Triclinic', 'Orthorhombic', 'Trigonal', 'Cubic'])#, rotation=45)
+ax.set_xticks(ticks=[1,3,5], labels=['Monoclinic', 'Tetragonal', 'Hexagonal'], minor=True)
+ax.tick_params(axis='x', which='minor', length=20, width=1)
+ax.set_xlabel('')
+ax.set_ylabel('Percentage of dataset')
+ax.set_yticks([0, 5, 10, 15, 20], ['0%', '5%', '10%', '15%', '20%'])
+ax.set_ylim(0, 16)
+# Save
+plt.tight_layout()
+plt.savefig('./statistics_crystalSystem_100kSubset.pdf', format='pdf', dpi=300, bbox_inches='tight')
+print('✓\n')
+
+#%% Number of elements in CHILI-100K subset
+print('Number of elements in CHILI-100K subset...')
+# Plot
+plt.figure(figsize=(6,5))
+ax = sns.histplot(data=stats_100k_subset, x='# of elements', hue='Stratified data split (Crystal system (Number), Equal classes)', multiple='dodge', discrete=True, stat='percent', palette=color_dict_set, hue_order=hue_order_set, common_norm=False, shrink=0.9)
+# Legend
+new_title = 'Dataset'
+ax.legend_.set_title(new_title)
+sns.move_legend(ax, loc='lower center', bbox_to_anchor=(0.5, 1), ncol=3)
+# Axes
+ax.set_xlim(0.5, 7.5)
+ax.set_xlabel('# of elements')
+ax.set_ylabel('Percentage of data split')
+ax.set_yticks([0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100], ['0%', '10%', '20%', '30%', '40%', '50%', '60%', '70%', '80%', '90%', '100%'])
+ax.set_ylim(0, 62)
+# Inset plot of 6 and 7 elements
+ip = ax.inset_axes([0.67,0.45,0.3,0.5])
+sns.histplot(data=stats_100k_subset, x='# of elements', hue='Stratified data split (Crystal system (Number), Equal classes)', multiple='dodge', discrete=True, stat='percent', palette=color_dict_set, hue_order=hue_order_set, common_norm=False, ax=ip, shrink=0.9)
+ip.set_xlim(5.5, 7.5)
+ip.set_ylim(0, 1.0)
+ip.set_yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0], ['0.0%', '0.2%', '0.4%', '0.6%', '0.8%', '1.0%'])
+ip.set_xlabel('')
+ip.set_ylabel('')
+ip.set_title('')
+ip.set_facecolor('white')
+ip.legend_.remove()
+ax.indicate_inset_zoom(ip)
+# Save
+plt.tight_layout()
+plt.savefig('./statistics_nElements_100kSubset.pdf', format='pdf', dpi=300, bbox_inches='tight')
 print('✓\n')
