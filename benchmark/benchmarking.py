@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import yaml
-from dataset_class import InOrgMatDatasets
+from dataset_class import CHILI
 from torch.utils.data import Subset
 from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.loader import DataLoader
@@ -125,7 +125,7 @@ with open(config_path, "r") as file:
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Define your dataset
-dataset = InOrgMatDatasets(root=config_dict["root"], dataset=config_dict["dataset"])
+dataset = CHILI(root=config_dict["root"], dataset=config_dict["dataset"])
 
 # Load / Create data split
 if config_dict["Data_config"]["split_strategy"] == "random":

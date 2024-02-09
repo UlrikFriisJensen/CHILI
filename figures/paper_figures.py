@@ -10,7 +10,7 @@ import seaborn as sns
 
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from benchmark.dataset_class import InOrgMatDatasets
+from benchmark.dataset_class import CHILI
 
 # Mute warnings
 warnings.simplefilter(action="ignore")
@@ -20,8 +20,8 @@ root = "../Dataset/"
 
 print("Loading datasets...\n\n")
 # Load datasets
-chili_3k = InOrgMatDatasets(root=root, dataset="CHILI-3K")
-chili_100k = InOrgMatDatasets(root=root, dataset="CHILI-100K")
+chili_3k = CHILI(root=root, dataset="CHILI-3K")
+chili_100k = CHILI(root=root, dataset="CHILI-100K")
 
 # Read data splits
 try:

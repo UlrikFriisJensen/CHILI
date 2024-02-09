@@ -19,7 +19,7 @@ from tqdm.auto import tqdm, trange
 # %% Dataset Class
 
 
-class InOrgMatDatasets(Dataset):
+class CHILI(Dataset):
     def __init__(
         self, root, dataset, transform=None, pre_transform=None, pre_filter=None
     ):

@@ -5,13 +5,13 @@ import sys
 
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from benchmark.dataset_class import InOrgMatDatasets
+from benchmark.dataset_class import CHILI
 
 
 # %% Main function
 def main(args):
     # Create dataset
-    dataset = InOrgMatDatasets(dataset=args["dataset_name"], root=args["dataset_root"])
+    dataset = CHILI(dataset=args["dataset_name"], root=args["dataset_root"])
     try:
         dataset.load_data_split(
             split_strategy=args["split_strategy"],
