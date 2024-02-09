@@ -2,14 +2,11 @@
 import os
 import sys
 import warnings
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from mendeleev import element
-from tqdm.auto import tqdm
 
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
