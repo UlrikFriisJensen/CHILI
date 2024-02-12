@@ -1,3 +1,4 @@
+from typing import Optional, Callable, List, Union
 import os
 import h5py
 import numpy as np
@@ -11,9 +12,28 @@ from torch_geometric.data import Data, Dataset, download_url, extract_zip
 from tqdm.auto import tqdm
 
 class CHILI(Dataset):
+    """
+    Dataset class for CHILI dataset.
+    """
     def __init__(
-        self, root, dataset, transform=None, pre_transform=None, pre_filter=None
-    ):
+        self,
+        root: str,
+        dataset: str,
+        transform: Optional[Callable] = None, 
+        pre_transform: Optional[Callable] = None,
+        pre_filter: Optional[Callable] = None
+    ) -> None:
+        """
+        Initializes CHILI dataset.
+        
+        Args:
+            root (str): Root directory of the dataset.
+            dataset (str): Name of the dataset.
+            transform (callable, optional): A function/transform to apply to the data.
+            pre_transform (callable, optional): A function/transform to apply to the data before saving.
+            pre_filter (callable, optional): A function that takes data and returns True if the data point should be included in the dataset.
+        """
+        
         self.dataset = dataset
         self.root = os.path.join(root, self.dataset)
         # Create root directory if not exits
@@ -47,16 +67,25 @@ class CHILI(Dataset):
         self._indices = range(self.len())
 
     @property
-    def raw_file_names(self):
+    def raw_file_names(self) -> List[str]:
+        """
+        Returns the list of raw file names in the dataset.
+        """
         paths = glob(os.path.join(self.raw_dir, "**/*.h5"))
         return paths
 
     @property
-    def processed_file_names(self):
+    def processed_file_names(self) -> List[str]:
+        """
+        Returns the list of processed file names in the dataset.
+        """
         paths = glob(os.path.join(self.processed_dir, "[!pre]*.pt"))
         return paths
 
-    def download(self):
+    def download(self) -> None:
+        """
+        Downloads the dataset.
+        """
         # Download to `self.raw_dir`.
         path = download_url(
             f"https://sid.erda.dk/share_redirect/h6ktCBGzPF/{self.dataset}.zip",
@@ -66,7 +95,22 @@ class CHILI(Dataset):
         extract_zip(path, self.raw_dir)
         os.remove(path)
 
-    def crystal_system_to_number(self, crystal_system):
+    def crystal_system_to_number(
+        self,
+        crystal_system: str
+    ) -> int:
+        """
+        Converts crystal system to a number.
+
+        Args:
+            crystal_system (str): Crystal system name.
+
+        Returns:
+            int: Corresponding crystal system number.
+        
+        Raises:
+            ValueError: If crystal system is not recognized.
+        """
         if crystal_system == "Triclinic":
             return 1
         elif crystal_system == "Monoclinic":
@@ -86,14 +130,29 @@ class CHILI(Dataset):
                 'Crystal system not recognized. Please use either "Triclinic", "Monoclinic", "Orthorhombic", "Tetragonal", "Trigonal", "Hexagonal" or "Cubic"'
             )
 
-    def write_to_log(log_file, s):
+    def write_to_log(
+        log_file: str,
+        s: str
+    ) -> None:
+        """
+        Writes the message to a log file.
+
+        Args:
+            log_file (str): Path to the log file.
+            s (str): Message to be written to the log file.
+        """
         try:
             with open(log_file, 'a') as f:
                 f.write(s + '\n')
         except Exception as e:
             print(f'Error while writing {s} to file: {log_file}')
 
-    def process(self):
+    def process(
+        self
+    ) -> None:
+        """
+        Processes the raw data and saves the processed data.
+        """
 
         idx = 0
         process_pbar = tqdm(desc="Processing data...", total=len(self.raw_file_names), leave=False)
@@ -195,7 +254,22 @@ class CHILI(Dataset):
 
         process_pbar.close()
 
-    def len(self, split=None):
+    def len(
+        self,
+        split: Optional[str] = None
+    ) -> int:
+        """
+        Returns the length of the dataset.
+
+        Args:
+            split (str, optional): Type of split. Defaults to None.
+
+        Returns:
+            int: Length of the dataset.
+        
+        Raises:
+            ValueError: If split is not recognized.
+        """
         if split is None:
             length = len(self.processed_file_names)
         elif split.lower() == "train":
@@ -210,7 +284,24 @@ class CHILI(Dataset):
             )
         return length
 
-    def get(self, idx, split=None):
+    def get(
+        self,
+        idx: int,
+        split: Optional[str] = None,
+    ) -> Data:
+        """
+        Returns the data at the given index.
+
+        Args:
+            idx (int): Index of the data.
+            split (str, optional): Type of split. Defaults to None.
+
+        Returns:
+            Data: Data object at the given index.
+        
+        Raises:
+            ValueError: If split is not recognized.
+        """
         if split is None:
             data = torch.load(os.path.join(self.processed_dir, f"data_{idx}.pt"))
         elif split.lower() == "train":
@@ -227,17 +318,27 @@ class CHILI(Dataset):
 
     def create_data_split(
         self,
-        test_size=0.1,
-        validation_size=None,
-        split_strategy="random",
-        stratify_on="Space group (Number)",
-        stratify_distribution="match",
-        n_sample_per_class="max",
-        random_state=42,
-        return_idx=False,
-    ):
+        test_size: float = 0.1,
+        validation_size: Optional[float] = None,
+        split_strategy: str = "random",
+        stratify_on: str ="Space group (Number)",
+        stratify_distribution: str = "match",
+        n_sample_per_class: str = "max",
+        random_state: int = 42,
+        return_idx: bool = False,
+    ) -> Optional[Union[List[int], None]]:
         """
         Split the dataset into train, validation and test sets. The indices of the split are saved to csv files in the processed directory.
+
+        Args:
+            test_size (float, optional): Size of the test set. Defaults to 0.1.
+            validation_size (float, optional): Size of the validation set. Defaults to None.
+            split_strategy (str, optional): Split strategy. Defaults to "random".
+            stratify_on (str, optional): Feature to stratify on. Defaults to "Space group (Number)".
+            stratify_distribution (str, optional): Distribution of stratification. Defaults to "match".
+            n_sample_per_class (str or int, optional): Number of samples per class. Defaults to "max".
+            random_state (int, optional): Random state for reproducibility. Defaults to 42.
+            return_idx (bool, optional): Whether to return indices. Defaults to False.
         """
 
         if validation_size is None:
@@ -416,12 +517,17 @@ class CHILI(Dataset):
 
     def load_data_split(
         self,
-        split_strategy="random",
-        stratify_on="Space group (Number)",
-        stratify_distribution="match",
+        split_strategy: str = "random",
+        stratify_on: str = "Space group (Number)",
+        stratify_distribution: str = "match",
     ) -> None:
         """
         Load the indices of the train, validation and test sets from csv files in the processed directory.
+
+        Args:
+            split_strategy (str, optional): Split strategy. Defaults to "random".
+            stratify_on (str, optional): Feature to stratify on. Defaults to "Space group (Number)".
+            stratify_distribution (str, optional): Distribution of stratification. Defaults to "match".
         """
         if split_strategy == "random":
 
@@ -487,7 +593,19 @@ class CHILI(Dataset):
         self.validation_set = Subset(self, validation_idx)
         self.test_set = Subset(self, test_idx)
 
-    def get_statistics(self, return_dataframe=False):
+    def get_statistics(
+        self,
+        return_dataframe: bool = False
+    ) -> Optional[pd.DataFrame]:
+        """
+        Computes statistics of the dataset.
+
+        Args:
+            return_dataframe (bool, optional): Whether to return a dataframe. Defaults to False.
+
+        Returns:
+            pd.DataFrame: Statistics of the dataset.
+        """
 
         # Get statistics path
         stat_path = os.path.join(self.root, "dataset_statistics.pkl")
