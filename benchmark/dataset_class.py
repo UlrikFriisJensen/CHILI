@@ -1,23 +1,14 @@
-# %% Imports
-
-# Standard imports
 import os
-from glob import glob
-from pathlib import Path
-
 import h5py
 import numpy as np
 import pandas as pd
+from glob import glob
 
-# Machine Learning imports
 import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Subset
 from torch_geometric.data import Data, Dataset, download_url, extract_zip
-from tqdm.auto import tqdm, trange
-
-# %% Dataset Class
-
+from tqdm.auto import tqdm
 
 class CHILI(Dataset):
     def __init__(
@@ -65,30 +56,15 @@ class CHILI(Dataset):
         paths = glob(os.path.join(self.processed_dir, "[!pre]*.pt"))
         return paths
 
-    def update_file_names(self, folder_path, file_extension="*"):
-        file_names = [
-            str(filepath.relative_to(folder_path))
-            for filepath in Path(folder_path).glob(f"*.{file_extension}")
-            if "pre" not in str(filepath)
-        ]
-        if len(file_names) == 0 and Path(folder_path).exists():
-            for subfolder in Path(folder_path).iterdir():
-                if subfolder.is_dir():
-                    file_names += [
-                        str(filepath.relative_to(folder_path))
-                        for filepath in Path(subfolder).glob(f"*.{file_extension}")
-                        if "pre" not in str(filepath)
-                    ]
-        return file_names
-
     def download(self):
         # Download to `self.raw_dir`.
         path = download_url(
             f"https://sid.erda.dk/share_redirect/h6ktCBGzPF/{self.dataset}.zip",
             self.raw_dir,
         )
+        # Extract zip and delete zip
         extract_zip(path, self.raw_dir)
-        Path(path).unlink()
+        os.remove(path)
 
     def crystal_system_to_number(self, crystal_system):
         if crystal_system == "Triclinic":
@@ -110,141 +86,112 @@ class CHILI(Dataset):
                 'Crystal system not recognized. Please use either "Triclinic", "Monoclinic", "Orthorhombic", "Tetragonal", "Trigonal", "Hexagonal" or "Cubic"'
             )
 
+    def write_to_log(log_file, s):
+        try:
+            with open(log_file, 'a') as f:
+                f.write(s + '\n')
+        except Exception as e:
+            print(f'Error while writing {s} to file: {log_file}')
+
     def process(self):
+
         idx = 0
-        process_pbar = tqdm(desc="Processing data...", total=len(self.raw_file_names))
+        process_pbar = tqdm(desc="Processing data...", total=len(self.raw_file_names), leave=False)
         for raw_path in self.raw_file_names:
-            # Read data from `raw_path`.
-            with h5py.File(raw_path, "r") as h5f:
-                # Read unit cell graph attributes
-                unit_cell_node_feat = torch.tensor(
-                    h5f["UnitCellGraph"]["NodeFeatures"][:], dtype=torch.float32
-                )
-                unit_cell_edge_index = torch.tensor(
-                    h5f["UnitCellGraph"]["EdgeDirections"][:], dtype=torch.long
-                )
-                unit_cell_edge_attr = torch.tensor(
-                    h5f["UnitCellGraph"]["EdgeFeatures"][:], dtype=torch.float32
-                )
-                unit_cell_pos_abs = torch.tensor(
-                    h5f["UnitCellGraph"]["AbsoluteCoordinates"][:], dtype=torch.float32
-                )
-                unit_cell_pos_frac = torch.tensor(
-                    h5f["UnitCellGraph"]["FractionalCoordinates"][:],
-                    dtype=torch.float32,
-                )
-                # Read other labels
-                cell_params = torch.tensor(
-                    h5f["GlobalLabels"]["CellParameters"][:], dtype=torch.float32
-                )
-                atomic_species = torch.tensor(
-                    h5f["GlobalLabels"]["ElementsPresent"][:], dtype=torch.float32
-                )
-                crystal_type = h5f["GlobalLabels"]["CrystalType"][()].decode()
-                space_group_symbol = h5f["GlobalLabels"]["SpaceGroupSymbol"][
-                    ()
-                ].decode()
-                space_group_number = h5f["GlobalLabels"]["SpaceGroupNumber"][()]
-                crystal_system = h5f["GlobalLabels"]["CrystalSystem"][()].decode()
-                crystal_system_number = self.crystal_system_to_number(crystal_system)
-                # Read scattering data
-                for key in h5f["DiscreteParticleGraphs"].keys():
-                    node_feat = torch.tensor(
-                        h5f["DiscreteParticleGraphs"][key]["NodeFeatures"][:],
-                        dtype=torch.float32,
-                    )
-                    edge_index = torch.tensor(
-                        h5f["DiscreteParticleGraphs"][key]["EdgeDirections"][:],
-                        dtype=torch.long,
-                    )
-                    edge_attr = torch.tensor(
-                        h5f["DiscreteParticleGraphs"][key]["EdgeFeatures"][:],
-                        dtype=torch.float32,
-                    )
 
-                    # Create graph data object
-                    data = Data(
-                        data_id=raw_path.split(".")[0].split("/")[-1],
-                        x=node_feat,
-                        edge_index=edge_index,
-                        edge_attr=edge_attr,
-                        pos_abs=torch.tensor(
-                            h5f["DiscreteParticleGraphs"][key]["AbsoluteCoordinates"][
-                                :
-                            ],
-                            dtype=torch.float32,
-                        ),
-                        pos_frac=torch.tensor(
-                            h5f["DiscreteParticleGraphs"][key]["FractionalCoordinates"][
-                                :
-                            ],
-                            dtype=torch.float32,
-                        ),
-                        y=dict(
-                            crystal_type=crystal_type,
-                            space_group_symbol=space_group_symbol,
-                            space_group_number=space_group_number,
-                            crystal_system=crystal_system,
-                            crystal_system_number=crystal_system_number,
-                            atomic_species=atomic_species,
-                            n_atomic_species=len(atomic_species),
-                            np_size=h5f["DiscreteParticleGraphs"][key]["NP size (Å)"][
-                                ()
-                            ],
-                            n_atoms=node_feat.shape[0],
-                            n_bonds=edge_index.shape[1],
-                            # Save unit cell graph attributes
-                            cell_params=cell_params,
-                            unit_cell_x=unit_cell_node_feat,
-                            unit_cell_edge_index=unit_cell_edge_index,
-                            unit_cell_edge_attr=unit_cell_edge_attr,
-                            unit_cell_pos_abs=unit_cell_pos_abs,
-                            unit_cell_pos_frac=unit_cell_pos_frac,
-                            unit_cell_n_atoms=unit_cell_node_feat.shape[0],
-                            unit_cell_n_bonds=unit_cell_edge_index.shape[1],
-                            # Save scattering data
-                            nd=torch.tensor(
-                                h5f["ScatteringData"][key]["ND"][:], dtype=torch.float32
-                            ),
-                            xrd=torch.tensor(
-                                h5f["ScatteringData"][key]["XRD"][:],
-                                dtype=torch.float32,
-                            ),
-                            nPDF=torch.tensor(
-                                h5f["ScatteringData"][key]["nPDF"][:],
-                                dtype=torch.float32,
-                            ),
-                            xPDF=torch.tensor(
-                                h5f["ScatteringData"][key]["xPDF"][:],
-                                dtype=torch.float32,
-                            ),
-                            sans=torch.tensor(
-                                h5f["ScatteringData"][key]["SANS"][:],
-                                dtype=torch.float32,
-                            ),
-                            saxs=torch.tensor(
-                                h5f["ScatteringData"][key]["SAXS"][:],
-                                dtype=torch.float32,
-                            ),
-                        ),
-                    )
-                    # data = Data(x=node_feat, edge_index=edge_index, edge_attr=edge_feat, pos_frac=pos_frac, pos_abs=pos_abs, y=target_dict, data_id=data_id)
+            # Read data from `raw_path`
+            try:
+                with h5py.File(raw_path, "r") as h5f:
 
-                    # Apply filters
-                    if self.pre_filter is not None and not self.pre_filter(data):
-                        continue
+                    # Unit cell
+                    unit_cell_node_feat = torch.tensor(h5f["UnitCellGraph"]["NodeFeatures"][:], dtype=torch.float32)
+                    unit_cell_edge_index = torch.tensor(h5f["UnitCellGraph"]["EdgeDirections"][:], dtype=torch.long)
+                    unit_cell_edge_attr = torch.tensor(h5f["UnitCellGraph"]["EdgeFeatures"][:], dtype=torch.float32)
+                    unit_cell_pos_abs = torch.tensor(h5f["UnitCellGraph"]["AbsoluteCoordinates"][:], dtype=torch.float32)
+                    unit_cell_pos_frac = torch.tensor(h5f["UnitCellGraph"]["FractionalCoordinates"][:], dtype=torch.float32)
 
-                    # Apply transforms
-                    if self.pre_transform is not None:
-                        data = self.pre_transform(data)
+                    # Cell parameters
+                    cell_params = torch.tensor(h5f["GlobalLabels"]["CellParameters"][:], dtype=torch.float32)
 
-                    # Save to `self.processed_dir`.
-                    torch.save(data, os.path.join(self.processed_dir, f"data_{idx}.pt"))
+                    # Atomic species
+                    atomic_species = torch.tensor(h5f["GlobalLabels"]["ElementsPresent"][:], dtype=torch.float32)
 
-                    idx += 1
+                    # Crystal type
+                    crystal_type = h5f["GlobalLabels"]["CrystalType"][()].decode()
 
-            # Update process pbar
-            process_pbar.update(1)
+                    # Space group
+                    space_group_symbol = h5f["GlobalLabels"]["SpaceGroupSymbol"][()].decode()
+                    space_group_number = h5f["GlobalLabels"]["SpaceGroupNumber"][()]
+
+                    # Crystal system
+                    crystal_system = h5f["GlobalLabels"]["CrystalSystem"][()].decode()
+                    crystal_system_number = self.crystal_system_to_number(crystal_system)
+
+                    # Loop through all particle sizes
+                    for key in h5f["DiscreteParticleGraphs"].keys():
+                        node_feat = torch.tensor(h5f["DiscreteParticleGraphs"][key]["NodeFeatures"][:], dtype=torch.float32)
+                        edge_index = torch.tensor(h5f["DiscreteParticleGraphs"][key]["EdgeDirections"][:],dtype=torch.long)
+                        edge_attr = torch.tensor(h5f["DiscreteParticleGraphs"][key]["EdgeFeatures"][:], dtype=torch.float32)
+
+                        # Create graph data object
+                        data = Data(
+                            data_id = raw_path.split(".")[0].split("/")[-1],
+                            x = node_feat,
+                            edge_index = edge_index,
+                            edge_attr = edge_attr,
+                            pos_abs = torch.tensor(h5f["DiscreteParticleGraphs"][key]["AbsoluteCoordinates"][:], dtype=torch.float32),
+                            pos_frac=torch.tensor(h5f["DiscreteParticleGraphs"][key]["FractionalCoordinates"][:], dtype=torch.float32),
+
+                            y=dict(
+                                crystal_type=crystal_type,
+                                space_group_symbol=space_group_symbol,
+                                space_group_number=space_group_number,
+                                crystal_system=crystal_system,
+                                crystal_system_number=crystal_system_number,
+                                atomic_species=atomic_species,
+                                n_atomic_species=len(atomic_species),
+                                np_size=h5f["DiscreteParticleGraphs"][key]["NP size (Å)"][()],
+                                n_atoms=node_feat.shape[0],
+                                n_bonds=edge_index.shape[1],
+
+                                cell_params=cell_params,
+                                unit_cell_x=unit_cell_node_feat,
+                                unit_cell_edge_index=unit_cell_edge_index,
+                                unit_cell_edge_attr=unit_cell_edge_attr,
+                                unit_cell_pos_abs=unit_cell_pos_abs,
+                                unit_cell_pos_frac=unit_cell_pos_frac,
+                                unit_cell_n_atoms=unit_cell_node_feat.shape[0],
+                                unit_cell_n_bonds=unit_cell_edge_index.shape[1],
+
+                                # Scattering data
+                                nd=torch.tensor(h5f["ScatteringData"][key]["ND"][:], dtype=torch.float32),
+                                xrd=torch.tensor(h5f["ScatteringData"][key]["XRD"][:], dtype=torch.float32),
+                                nPDF=torch.tensor(h5f["ScatteringData"][key]["nPDF"][:], dtype=torch.float32),
+                                xPDF=torch.tensor(h5f["ScatteringData"][key]["xPDF"][:], dtype=torch.float32),
+                                sans=torch.tensor(h5f["ScatteringData"][key]["SANS"][:], dtype=torch.float32),
+                                saxs=torch.tensor(h5f["ScatteringData"][key]["SAXS"][:], dtype=torch.float32),
+                            ),
+                        )
+
+                        # Apply filters
+                        if self.pre_filter is not None and not self.pre_filter(data):
+                            continue
+
+                        # Apply transforms
+                        if self.pre_transform is not None:
+                            data = self.pre_transform(data)
+
+                        # Save to `self.processed_dir`.
+                        torch.save(data, os.path.join(self.processed_dir, f"data_{idx}.pt"))
+
+                        # Update index
+                        idx += 1
+
+                # Update process pbar
+                process_pbar.update(1)
+
+            except Exception as e:
+                write_to_log('processing_error_log.out', raw_path + '\n' + e + '\n')
 
         process_pbar.close()
 
@@ -299,14 +246,17 @@ class CHILI(Dataset):
         df_stats = self.get_statistics(return_dataframe=True)
 
         if split_strategy == "random":
+
             # Split data into train, validation and test sets
             train_idx, test_idx = train_test_split(
-                np.arange(self.len()), test_size=test_size, random_state=random_state
+                np.arange(self.len()),
+                test_size = test_size,
+                random_state = random_state
             )
             train_idx, validation_idx = train_test_split(
                 train_idx,
-                test_size=validation_size / (1 - test_size),
-                random_state=random_state,
+                test_size = validation_size / (1 - test_size),
+                random_state = random_state
             )
 
             # Save indices to csv files
@@ -331,12 +281,8 @@ class CHILI(Dataset):
 
             # Update statistics dataframe
             df_stats[f"{split_strategy.capitalize()} data split"] = ""
-            df_stats[f"{split_strategy.capitalize()} data split"].loc[
-                train_idx
-            ] = "Train"
-            df_stats[f"{split_strategy.capitalize()} data split"].loc[
-                validation_idx
-            ] = "Validation"
+            df_stats[f"{split_strategy.capitalize()} data split"].loc[train_idx] = "Train"
+            df_stats[f"{split_strategy.capitalize()} data split"].loc[validation_idx] = "Validation"
             df_stats[f"{split_strategy.capitalize()} data split"].loc[test_idx] = "Test"
 
         elif split_strategy == "stratified":
@@ -357,47 +303,32 @@ class CHILI(Dataset):
 
                 # Save indices to csv files
                 np.savetxt(
-                    os.path.join(
-                        self.root,
-                        f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_train.csv',
-                    ),
+                    os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_train.csv'),
                     train_idx,
                     delimiter=",",
                     fmt="%i",
                 )
                 np.savetxt(
-                    os.path.join(
-                        self.root,
-                        f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_validation.csv',
-                    ),
+                    os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_validation.csv'),
                     validation_idx,
                     delimiter=",",
                     fmt="%i",
                 )
                 np.savetxt(
-                    os.path.join(
-                        self.root,
-                        f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_test.csv',
-                    ),
+                    os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_test.csv'),
                     test_idx,
                     delimiter=",",
                     fmt="%i",
                 )
 
                 # Update statistics dataframe
-                df_stats[
-                    f"{split_strategy.capitalize()} data split ({stratify_on})"
-                ] = ""
-                df_stats[
-                    f"{split_strategy.capitalize()} data split ({stratify_on})"
-                ].loc[train_idx] = "Train"
-                df_stats[
-                    f"{split_strategy.capitalize()} data split ({stratify_on})"
-                ].loc[validation_idx] = "Validation"
-                df_stats[
-                    f"{split_strategy.capitalize()} data split ({stratify_on})"
-                ].loc[test_idx] = "Test"
+                df_stats[f"{split_strategy.capitalize()} data split ({stratify_on})"] = ""
+                df_stats[f"{split_strategy.capitalize()} data split ({stratify_on})"].loc[train_idx] = "Train"
+                df_stats[f"{split_strategy.capitalize()} data split ({stratify_on})"].loc[validation_idx] = "Validation"
+                df_stats[f"{split_strategy.capitalize()} data split ({stratify_on})"].loc[test_idx] = "Test"
+
             elif stratify_distribution == "equal":
+
                 if n_sample_per_class == "max":
                     # Find the class with the least number of samples
                     min_samples = df_stats[stratify_on].value_counts().min()
@@ -415,72 +346,56 @@ class CHILI(Dataset):
                         .sample(min_samples, random_state=random_state)
                         .index
                     )
+
                 # Find the total number of samples
                 n_samples = len(subset_idx)
+
                 # Find the number of samples to use for train, validation and test sets
                 n_test = int(n_samples * test_size)
-                n_validation = int(
-                    (n_samples - n_test) * validation_size / (1 - test_size)
-                )
+                n_validation = int((n_samples - n_test) * validation_size / (1 - test_size))
                 n_train = n_samples - n_test - n_validation
+
                 # Split data into train, validation and test sets
                 train_idx, test_idx = train_test_split(
                     subset_idx,
-                    train_size=n_train + n_validation,
-                    test_size=n_test,
-                    random_state=random_state,
-                    stratify=df_stats.loc[subset_idx][stratify_on],
+                    train_size = n_train + n_validation,
+                    test_size = n_test,
+                    random_state = random_state,
+                    stratify = df_stats.loc[subset_idx][stratify_on],
                 )
                 train_idx, validation_idx = train_test_split(
                     train_idx,
-                    train_size=n_train,
-                    test_size=n_validation,
-                    random_state=random_state,
-                    stratify=df_stats.loc[train_idx][stratify_on],
+                    train_size = n_train,
+                    test_size = n_validation,
+                    random_state = random_state,
+                    stratify = df_stats.loc[train_idx][stratify_on],
                 )
 
                 # Save indices to csv files
                 np.savetxt(
-                    os.path.join(
-                        self.root,
-                        f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_{stratify_distribution}_train.csv',
-                    ),
+                    os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_{stratify_distribution}_train.csv'),
                     train_idx,
                     delimiter=",",
                     fmt="%i",
                 )
                 np.savetxt(
-                    os.path.join(
-                        self.root,
-                        f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_{stratify_distribution}_validation.csv',
-                    ),
+                    os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_{stratify_distribution}_validation.csv'),
                     validation_idx,
                     delimiter=",",
                     fmt="%i",
                 )
                 np.savetxt(
-                    os.path.join(
-                        self.root,
-                        f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_{stratify_distribution}_test.csv',
-                    ),
+                    os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ", "")}_{stratify_distribution}_test.csv'),
                     test_idx,
                     delimiter=",",
                     fmt="%i",
                 )
 
                 # Update statistics dataframe
-                df_stats[
-                    f"{split_strategy.capitalize()} data split ({stratify_on}, Equal classes)"
-                ] = ""
-                df_stats[
-                    f"{split_strategy.capitalize()} data split ({stratify_on}, Equal classes)"
-                ].loc[train_idx] = "Train"
-                df_stats[
-                    f"{split_strategy.capitalize()} data split ({stratify_on}, Equal classes)"
-                ].loc[validation_idx] = "Validation"
-                df_stats[
-                    f"{split_strategy.capitalize()} data split ({stratify_on}, Equal classes)"
-                ].loc[test_idx] = "Test"
+                df_stats[f"{split_strategy.capitalize()} data split ({stratify_on}, Equal classes)"] = ""
+                df_stats[f"{split_strategy.capitalize()} data split ({stratify_on}, Equal classes)"].loc[train_idx] = "Train"
+                df_stats[f"{split_strategy.capitalize()} data split ({stratify_on}, Equal classes)"].loc[validation_idx] = "Validation"
+                df_stats[f"{split_strategy.capitalize()} data split ({stratify_on}, Equal classes)"].loc[test_idx] = "Test"
             else:
                 raise ValueError(
                     'Stratify distribution not recognized. Please use either "match" or "equal"'
@@ -509,6 +424,7 @@ class CHILI(Dataset):
         Load the indices of the train, validation and test sets from csv files in the processed directory.
         """
         if split_strategy == "random":
+
             # Load indices from csv files
             train_idx = np.loadtxt(
                 os.path.join(self.root, f"datasplit_{split_strategy}_train.csv"),
@@ -527,56 +443,41 @@ class CHILI(Dataset):
             )
 
         elif split_strategy == "stratified":
+
             if stratify_distribution == "match":
+
                 # Load indices from csv files
                 train_idx = np.loadtxt(
-                    os.path.join(
-                        self.root,
-                        f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_train.csv',
-                    ),
+                    os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_train.csv'),
                     delimiter=",",
                     dtype=int,
                 )
                 validation_idx = np.loadtxt(
-                    os.path.join(
-                        self.root,
-                        f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_validation.csv',
-                    ),
+                    os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_validation.csv'),
                     delimiter=",",
                     dtype=int,
                 )
                 test_idx = np.loadtxt(
-                    os.path.join(
-                        self.root,
-                        f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_test.csv',
-                    ),
+                    os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_test.csv'),
                     delimiter=",",
                     dtype=int,
                 )
 
             elif stratify_distribution == "equal":
+
                 # Load indices from csv files
                 train_idx = np.loadtxt(
-                    os.path.join(
-                        self.root,
-                        f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_train.csv',
-                    ),
+                    os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_train.csv'),
                     delimiter=",",
                     dtype=int,
                 )
                 validation_idx = np.loadtxt(
-                    os.path.join(
-                        self.root,
-                        f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_validation.csv',
-                    ),
+                    os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_validation.csv'),
                     delimiter=",",
                     dtype=int,
                 )
                 test_idx = np.loadtxt(
-                    os.path.join(
-                        self.root,
-                        f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_test.csv',
-                    ),
+                    os.path.join(self.root, f'datasplit_{split_strategy}_{stratify_on.replace(" ","")}_{stratify_distribution}_test.csv'),
                     delimiter=",",
                     dtype=int,
                 )
@@ -587,7 +488,11 @@ class CHILI(Dataset):
         self.test_set = Subset(self, test_idx)
 
     def get_statistics(self, return_dataframe=False):
+
+        # Get statistics path
         stat_path = os.path.join(self.root, "dataset_statistics.pkl")
+
+        # Read pkl or generate
         if os.path.exists(stat_path):
             df_stats = pd.read_pickle(stat_path)
         else:
@@ -608,7 +513,8 @@ class CHILI(Dataset):
                 ]
             )
 
-            for idx in trange(self.len()):
+            stat_pbar = tqdm(desc='Generating statistics...', total=self.len(), leave=False)
+            for idx in tqdm(range(self.len())):
                 graph = self.get(
                     idx=idx,
                 )
@@ -626,6 +532,8 @@ class CHILI(Dataset):
                     graph.y["np_size"],
                     graph.y["atomic_species"],
                 ]
+                stat_pbar.update(1)
+            stat_pbar.close()
 
         df_stats.to_pickle(stat_path)
 
