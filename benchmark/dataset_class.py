@@ -253,7 +253,7 @@ class CHILI(Dataset):
                 process_pbar.update(1)
 
             except Exception as e:
-                write_to_log('processing_error_log.out', raw_path + '\n' + e + '\n')
+                self.write_to_log('processing_error_log.out', raw_path + '\n' + e + '\n')
 
         process_pbar.close()
 
