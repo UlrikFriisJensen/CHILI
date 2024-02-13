@@ -13,7 +13,6 @@ from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.utils import unbatch
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn.models import GAT, GCN, GIN, PMLP, EdgeCNN, GraphSAGE, GraphUNet
-from torch_geometric.nn import global_add_pool, global_max_pool, global_mean_pool
 from torch_geometric.seed import seed_everything
 
 from torcheval.metrics import MulticlassF1Score
@@ -26,75 +25,7 @@ from tqdm.auto import tqdm
 import numpy as np
 
 from dataset_class import CHILI
-
-#warnings.simplefilter(action='ignore')
-warnings.filterwarnings('ignore', module='torcheval')
-
-# Simple MLP model
-class MLP(nn.Module):
-    def __init__(self, in_channels, hidden_channels, out_channels, num_layers):
-        super(MLP, self).__init__()
-
-        self.num_layers = num_layers
-        self.in_channels = in_channels
-        self.hidden_channels = hidden_channels
-        self.out_channels = out_channels
-
-        self.layers = nn.ModuleList()
-        self.layers.append(nn.Linear(in_channels, hidden_channels))
-        for _ in range(num_layers - 2):
-            self.layers.append(nn.Linear(hidden_channels, hidden_channels))
-        self.layers.append(nn.Linear(hidden_channels, out_channels))
-
-    def forward(self, x, batch):
-        if len(x.shape) < 2:
-            batch_size = torch.max(batch) + 1
-            x = x.reshape(batch_size, x.shape[-1] // batch_size)
-
-        for i in range(len(self.layers) - 1):
-            x = F.relu(self.layers[i](x))
-        x = self.layers[-1](x)
-        return x
-
-# Regression secondary module
-class Secondary(nn.Module):
-    def __init__(self, in_channels, hidden_channels, out_channels):
-        super(Secondary, self).__init__()
-
-        self.in_channels = in_channels
-        self.hidden_channels = hidden_channels
-        self.out_channels = out_channels
-
-        self.fc1 = nn.Linear(self.in_channels, self.hidden_channels)
-        self.fc2 = nn.Linear(self.hidden_channels, self.out_channels)
-
-    def forward(self, x, batch):
-        # Pool the graph
-        x = torch.cat(
-            (
-                global_mean_pool(x, batch),
-                global_add_pool(x, batch),
-                global_max_pool(x, batch),
-            ),
-            dim=1,
-        )
-        # Linear layers
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-
-        return x
-    
-def position_MAE(
-    pred_xyz,
-    true_xyz
-):
-    """
-    Calculates the mean absolute error between the predicted and true positions of the atoms in units of Ångstrøm.
-    """
-    return torch.mean(
-        torch.sqrt(torch.sum(F.mse_loss(pred_xyz, true_xyz, reduction="none"), dim=1)),
-        dim=0,
-    )
+from modules import MLP, Secondary
 
 def run_benchmarking(args):
 
@@ -106,7 +37,7 @@ def run_benchmarking(args):
     
     # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = 'cpu'
+    #device = 'cpu'
     
     # Create dataset
     dataset = CHILI(root=config_dict["root"], dataset=config_dict["dataset"])
@@ -244,37 +175,57 @@ def run_benchmarking(args):
     default_model_configurations = {
         "GCN": {
             "class": GCN,
-            "kwargs": {"x": "None", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"}
+            "kwargs": {"x": "None", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"},
+            "skip_training": False,
         },
         "GraphSAGE": {
             "class": GraphSAGE,
-            "kwargs": {"x": "None", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"}
+            "kwargs": {"x": "None", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"},
+            "skip_training": False,
         },
         "GIN": {
             "class": GIN,
-            "kwargs": {"x": "None", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"}
+            "kwargs": {"x": "None", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"},
+            "skip_training": False,
         },
         "GAT": {
             "class": GAT,
-            "kwargs": {"x": "None", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"}
+            "kwargs": {"x": "None", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"},
+            "skip_training": False,
         },
         "EdgeCNN": {
             "class": EdgeCNN,
-            "kwargs": {"x": "None", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"}
+            "kwargs": {"x": "None", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"},
+            "skip_training": False,
         },
         "GraphUNet": {
             "class": GraphUNet,
-            "kwargs": {"x": "None", "edge_index": "data.edge_index", "batch": "data.batch"}
+            "kwargs": {"x": "None", "edge_index": "data.edge_index", "batch": "data.batch"},
+            "skip_training": False,
         },
         "PMLP": {
             "class": PMLP,
-            "kwargs": {"x": "None", "edge_index": "data.edge_index"}
+            "kwargs": {"x": "None", "edge_index": "data.edge_index"},
+            "skip_training": False,
         },
         "MLP": {
             "class": MLP,
-            "kwargs": {"x": "None", "batch": "data.batch"}
+            "kwargs": {"x": "None", "batch": "data.batch"},
+            "skip_training": False,
         },
     }
+
+    def position_MAE(
+        pred_xyz,
+        true_xyz
+    ):
+        """
+        Calculates the mean absolute error between the predicted and true positions of the atoms in units of Ångstrøm.
+        """
+        return torch.mean(
+            torch.sqrt(torch.sum(F.mse_loss(pred_xyz, true_xyz, reduction="none"), dim=1)),
+            dim=0,
+        )
     
     def atom_classification(data, model, secondary, model_kwargs, device, config_dict):
         evaluated_kwargs = {}
@@ -291,7 +242,7 @@ def run_benchmarking(args):
             evaluated_kwargs[key] = eval(value)
         evaluated_kwargs['x'] = torch.cat((data.x, data.pos_abs), dim=1)
         pred = secondary(model.forward(**evaluated_kwargs), batch=data.batch)
-        truth = torch.tensor(data.y['crystal_system_number'], device=device)
+        truth = data.y['crystal_system_number']
         return pred, truth
     
     def space_group_classification(data, model, secondary, model_kwargs, device, config_dict):
@@ -843,6 +794,25 @@ def run_benchmarking(args):
         
         # Epoch loop
         for epoch in range(config_dict['Train_config']['epochs']):
+            
+            # Skip training and validation if baseline
+            if model_configuration['skip_training']:
+                torch.save(
+                    {
+                        "epoch": epoch + 1,
+                        "model_state_dict": model.state_dict(),
+                        "secondary_state_dict": secondary.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "config_dict": config_dict,
+                        "train_subset_indices": dataset.train_set.indices,
+                        "validation_subset_indices": dataset.validation_set.indices,
+                        "test_subset_indices": dataset.test_set.indices,
+                    },
+                    f"{save_dir}/best.pt",
+                )
+                train_loss = 0
+                val_error = 0
+                break
 
             # Stop training if max training time is exceeded
             if time.time() - start_time > max_training_time:
@@ -853,7 +823,7 @@ def run_benchmarking(args):
                 print("Max Patience reached, quitting...", flush=True)
                 break
 
-            # Training loop
+            # Train loop
             model.train()
             train_loss = 0
             for data in train_loader:
@@ -869,6 +839,7 @@ def run_benchmarking(args):
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
+
                 train_loss += loss.item()
             
             # Train loss
@@ -911,6 +882,7 @@ def run_benchmarking(args):
                 patience = 0
             else:
                 patience += 1
+            
 
             # Save latest model?
             if config_dict['save_latest_model']:
