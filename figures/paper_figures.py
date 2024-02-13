@@ -54,12 +54,12 @@ def plot_crystal_system_comparison(
     ax.legend_.set_title(new_title)
     sns.move_legend(ax, loc="lower center", bbox_to_anchor=(0.5, 1), ncol=2)
     # Axes
-    ax.set_xlim(-0.5, 6.5)
+    ax.set_xlim(0.5, 7.5)
     ax.set_xticks(
-        ticks=[0, 2, 4, 6], labels=["Triclinic", "Orthorhombic", "Trigonal", "Cubic"]
+        ticks=[1, 3, 5, 7], labels=["Triclinic", "Orthorhombic", "Trigonal", "Cubic"]
     )  # , rotation=45)
     ax.set_xticks(
-        ticks=[1, 3, 5], labels=["Monoclinic", "Tetragonal", "Hexagonal"], minor=True
+        ticks=[2, 4, 6], labels=["Monoclinic", "Tetragonal", "Hexagonal"], minor=True
     )
     ax.tick_params(axis="x", which="minor", length=20, width=1)
     ax.set_xlabel("")
@@ -856,12 +856,12 @@ def plot_crystal_system_chili100k(
     ax.legend_.set_title(new_title)
     sns.move_legend(ax, loc="lower center", bbox_to_anchor=(0.5, 1), ncol=3)
     # Axes
-    ax.set_xlim(-0.5, 6.5)
+    ax.set_xlim(0.5, 7.5)
     ax.set_xticks(
-        ticks=[0, 2, 4, 6], labels=["Triclinic", "Orthorhombic", "Trigonal", "Cubic"]
+        ticks=[1, 3, 5, 7], labels=["Triclinic", "Orthorhombic", "Trigonal", "Cubic"]
     )  # , rotation=45)
     ax.set_xticks(
-        ticks=[1, 3, 5], labels=["Monoclinic", "Tetragonal", "Hexagonal"], minor=True
+        ticks=[2, 4, 6], labels=["Monoclinic", "Tetragonal", "Hexagonal"], minor=True
     )
     ax.tick_params(axis="x", which="minor", length=20, width=1)
     ax.set_xlabel("")
@@ -967,16 +967,20 @@ if __name__ == "__main__":
     chili_3k = CHILI(root=root, dataset="CHILI-3K")
     chili_100k = CHILI(root=root, dataset="CHILI-100K")
 
-    # Read data splits
+    # Read data splits for CHILI-3K dataset
     try:
         chili_3k.load_data_split()
+    except FileNotFoundError:
+        # Create data splits for CHILI-3K dataset
+        chili_3k.create_data_split()
+        chili_3k.load_data_split()
+
+    # Read data splits for CHILI-100K dataset
+    try:
         chili_100k.load_data_split()
     except FileNotFoundError:
-        # Create data splits
-        chili_3k.create_data_split()
+        # Create data splits for CHILI-100K dataset
         chili_100k.create_data_split()
-
-        chili_3k.load_data_split()
         chili_100k.load_data_split()
 
     # Get statistics
@@ -1003,7 +1007,6 @@ if __name__ == "__main__":
             stratify_distribution="equal",
             n_sample_per_class=425,
         )
-
         chili_100k.load_data_split(
             split_strategy="stratified",
             stratify_on="Crystal system (Number)",
