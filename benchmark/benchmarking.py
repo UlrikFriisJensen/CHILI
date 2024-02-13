@@ -16,7 +16,9 @@ from torch_geometric.nn.models import GAT, GCN, GIN, PMLP, EdgeCNN, GraphSAGE, G
 from torch_geometric.nn import global_add_pool, global_max_pool, global_mean_pool
 from torch_geometric.seed import seed_everything
 
-from torcheval.metrics import MulticlassF1Score, MulticlassAccuracy
+from torcheval.metrics import MulticlassF1Score
+from torcheval.metrics.functional import multiclass_f1_score
+from torch.nn.functional import cross_entropy
 
 import pandas as pd
 from glob import glob
@@ -25,16 +27,18 @@ import numpy as np
 
 from dataset_class import CHILI
 
+#warnings.simplefilter(action='ignore')
+warnings.filterwarnings('ignore', module='torcheval')
+
 # Simple MLP model
-class SimpleMLP(nn.Module):
-    def __init__(self, in_channels, hidden_channels, out_channels, device, num_layers):
-        super(SimpleMLP, self).__init__()
+class MLP(nn.Module):
+    def __init__(self, in_channels, hidden_channels, out_channels, num_layers):
+        super(MLP, self).__init__()
 
         self.num_layers = num_layers
         self.in_channels = in_channels
         self.hidden_channels = hidden_channels
         self.out_channels = out_channels
-        self.device = device
 
         self.layers = nn.ModuleList()
         self.layers.append(nn.Linear(in_channels, hidden_channels))
@@ -81,7 +85,6 @@ class Secondary(nn.Module):
         return x
     
 def position_MAE(
-    self,
     pred_xyz,
     true_xyz
 ):
@@ -103,6 +106,7 @@ def run_benchmarking(args):
     
     # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = 'cpu'
     
     # Create dataset
     dataset = CHILI(root=config_dict["root"], dataset=config_dict["dataset"])
@@ -128,6 +132,71 @@ def run_benchmarking(args):
             stratify_on = config_dict["Data_config"]["stratify_on"],
             stratify_distribution = config_dict["Data_config"]["stratify_distribution"],
         )
+    
+    # Filter on number of atoms if the task is PositionRegression from Signal
+    if config_dict["task"] in [
+        "AbsPositionRegressionxPDF",
+        "AbsPositionRegressionXRD",
+        "AbsPositionRegressionSAXS",
+    ]:
+        # Train set
+        filtered_idx = []
+        for idx in dataset.train_set.indices:
+            data = dataset[idx]
+            if len(data.pos_abs) <= config_dict["Model_config"]["out_channels"] // 3:
+                filtered_idx.append(idx)
+    
+        dataset.train_set = Subset(dataset, filtered_idx)
+    
+        # Validation set
+        filtered_idx = []
+        for idx in dataset.validation_set.indices:
+            data = dataset[idx]
+            if len(data.pos_abs) <= config_dict["Model_config"]["out_channels"] // 3:
+                filtered_idx.append(idx)
+    
+        dataset.validation_set = Subset(dataset, filtered_idx)
+    
+        # Test set
+        filtered_idx = []
+        for idx in dataset.test_set.indices:
+            data = dataset[idx]
+            if len(data.pos_abs) <= config_dict["Model_config"]["out_channels"] // 3:
+                filtered_idx.append(idx)
+    
+        dataset.test_set = Subset(dataset, filtered_idx)
+    
+    if config_dict["task"] in [
+        "UnitCellPositionRegressionxPDF",
+        "UnitCellPositionRegressionXRD",
+        "UnitCellPositionRegressionSAXS",
+    ]:
+        # Train set
+        filtered_idx = []
+        for idx in dataset.train_set.indices:
+            data = dataset[idx]
+            if (len(data.y["unit_cell_pos_frac"]) <= config_dict["Model_config"]["out_channels"] // 3):
+                filtered_idx.append(idx)
+    
+        dataset.train_set = Subset(dataset, filtered_idx)
+    
+        # Validation set
+        filtered_idx = []
+        for idx in dataset.validation_set.indices:
+            data = dataset[idx]
+            if (len(data.y["unit_cell_pos_frac"]) <= config_dict["Model_config"]["out_channels"] // 3):
+                filtered_idx.append(idx)
+    
+        dataset.validation_set = Subset(dataset, filtered_idx)
+    
+        # Test set
+        filtered_idx = []
+        for idx in dataset.test_set.indices:
+            data = dataset[idx]
+            if (len(data.y["unit_cell_pos_frac"]) <= config_dict["Model_config"]["out_channels"] // 3):
+                filtered_idx.append(idx)
+    
+        dataset.test_set = Subset(dataset, filtered_idx)
         
     # Define dataloader
     train_loader = DataLoader(
@@ -171,128 +240,563 @@ def run_benchmarking(args):
     print(f"Number of test samples: {len(dataset.test_set)}\n", flush=True)
     print(f"Device: {device}", flush=True)
 
-    # Define a dictionary to map model names to their classes and specific kwargs
-    model_configurations = {
+    # Default model configs
+    default_model_configurations = {
         "GCN": {
             "class": GCN,
-            "kwargs": {"x": "data.pos_abs", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"}
+            "kwargs": {"x": "None", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"}
         },
         "GraphSAGE": {
             "class": GraphSAGE,
-            "kwargs": {"x": "data.pos_abs", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"}
+            "kwargs": {"x": "None", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"}
         },
         "GIN": {
             "class": GIN,
-            "kwargs": {"x": "data.pos_abs", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"}
+            "kwargs": {"x": "None", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"}
         },
         "GAT": {
-            "class": lambda **kwargs: GAT(v2=False, **kwargs),
-            "kwargs": {"x": "data.pos_abs", "edge_index": "data.edge_index", "v2": False, "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"}
+            "class": GAT,
+            "kwargs": {"x": "None", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"}
         },
         "EdgeCNN": {
             "class": EdgeCNN,
-            "kwargs": {"x": "data.pos_abs", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"}
+            "kwargs": {"x": "None", "edge_index": "data.edge_index", "edge_attr": "data.edge_attr", "edge_weight": "data.edge_attr", "batch": "data.batch"}
         },
         "GraphUNet": {
             "class": GraphUNet,
-            "kwargs": {"x": "torch.cat((data.x, data.pos_abs), dim=1)", "edge_index": "data.edge_index", "batch": "data.batch"}
+            "kwargs": {"x": "None", "edge_index": "data.edge_index", "batch": "data.batch"}
         },
         "PMLP": {
             "class": PMLP,
-            "kwargs": {"x": "data.x", "edge_index": "data.edge_index"}
+            "kwargs": {"x": "None", "edge_index": "data.edge_index"}
         },
         "MLP": {
-            "class": lambda **kwargs: SimpleMLP(device=device, **kwargs),
-            "kwargs": {"x": "torch.cat((data.x, data.pos_abs), dim=1)", "edge_index": "data.edge_index", "device": "device"}
+            "class": MLP,
+            "kwargs": {"x": "None", "batch": "data.batch"}
         },
     }
+    
+    def atom_classification(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        evaluated_kwargs['x'] = data.pos_abs
+        pred = model.forward(**evaluated_kwargs)
+        truth = data.x[:,0].long()
+        return pred, truth
+    
+    def crystal_system_classification(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        evaluated_kwargs['x'] = torch.cat((data.x, data.pos_abs), dim=1)
+        pred = secondary(model.forward(**evaluated_kwargs), batch=data.batch)
+        truth = torch.tensor(data.y['crystal_system_number'], device=device)
+        return pred, truth
+    
+    def space_group_classification(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        evaluated_kwargs['x'] = torch.cat((data.x, data.pos_abs), dim=1)
+        pred = secondary(model.forward(**evaluated_kwargs), batch=data.batch)
+        truth = torch.tensor(data.y['space_group_number'], device=device)
+        return pred, truth
+
+    def pos_abs_regression(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        evaluated_kwargs['x'] = data.x
+        pred = model.forward(**evaluated_kwargs)
+        truth = data.pos_abs
+        return pred, truth
+
+    def edge_attr_regression(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        evaluated_kwargs['x'] = torch.cat((data.x, data.pos_abs), dim=1)
+        pred = model.forward(**evaluated_kwargs)
+        pred = torch.sum(pred[data.edge_index[0, :]] * pred[data.edge_index[1, :]], dim = -1)
+        truth = data.edge_attr
+        return pred, truth
+
+    def saxs_regression(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        evaluated_kwargs['x'] = torch.cat((data.x, data.pos_abs), dim=1)
+        pred = secondary(model.forward(**evaluated_kwargs), batch=data.batch)
+        truth = data.y['saxs'][1::2, :]
+        truth_min = torch.min(truth, dim=-1, keepdim=True)[0]
+        truth_max = torch.max(truth, dim=-1, keepdim=True)[0]
+        truth = (truth - truth_min) / (truth_max - truth_min)
+        return pred, truth
+
+    def xrd_regression(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        evaluated_kwargs['x'] = torch.cat((data.x, data.pos_abs), dim=1)
+        pred = secondary(model.forward(**evaluated_kwargs), batch=data.batch)
+        truth = data.y['xrd'][1::2, :]
+        truth_min = torch.min(truth, dim=-1, keepdim=True)[0]
+        truth_max = torch.max(truth, dim=-1, keepdim=True)[0]
+        truth = (truth - truth_min) / (truth_max - truth_min)
+        return pred, truth
+
+    def xPDF_regression(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        evaluated_kwargs['x'] = torch.cat((data.x, data.pos_abs), dim=1)
+        pred = secondary(model.forward(**evaluated_kwargs), batch=data.batch)
+        truth = data.y['xPDF'][1::2, :]
+        truth_min = torch.min(truth, dim=-1, keepdim=True)[0]
+        truth_max = torch.max(truth, dim=-1, keepdim=True)[0]
+        truth = (truth - truth_min) / (truth_max - truth_min)
+        return pred, truth
+    
+    def pos_abs_padded(data, config_dict, device):
+        batch_size = torch.max(data.batch) + 1
+        truth = torch.zeros((batch_size, config_dict['Model_config']['out_channels'])).to(device=device)
+        for i, x in enumerate(unbatch(data.pos_abs, data.batch)):
+
+            # Sort according to norm
+            norms = torch.norm(x, p = 2, dim = -1)
+            indices = torch.sort(norms, descending=False, dim=0)[1]
+            x = x[indices]
+
+            # Padding
+            padding_size = config_dict['Model_config']['out_channels'] // 3 - x.size(0)
+            if padding_size > 0:
+                padding = torch.full((padding_size, x.size(1)), 100, dtype = x.dtype).to(device=device)
+                x = torch.cat([x, padding], dim = 0)
+
+            # Append
+            truth[i] = x.flatten()
+
+        return truth
+
+    def pos_abs_from_saxs(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        sct = data.y['saxs'][1::2, :]
+        sct_min = torch.min(sct, dim=-1, keepdim=True)[0]
+        sct_max = torch.max(sct, dim=-1, keepdim=True)[0]
+        sct = (sct - sct_min) / (sct_max - sct_min)
+
+        evaluated_kwargs['x'] = sct
+        pred = model(**evaluated_kwargs)
+        truth = pos_abs_padded(data, config_dict, device)
+        
+        return pred[truth < 100], truth[truth < 100]
+
+    def pos_abs_from_xrd(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        sct = data.y['xrd'][1::2, :]
+        sct_min = torch.min(sct, dim=-1, keepdim=True)[0]
+        sct_max = torch.max(sct, dim=-1, keepdim=True)[0]
+        sct = (sct - sct_min) / (sct_max - sct_min)
+
+        evaluated_kwargs['x'] = sct
+        pred = model(**evaluated_kwargs)
+        truth = pos_abs_padded(data, config_dict, device)
+        
+        return pred[truth < 100], truth[truth < 100]
+    
+    def pos_abs_from_xPDF(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        sct = data.y['xPDF'][1::2, :]
+        sct_min = torch.min(sct, dim=-1, keepdim=True)[0]
+        sct_max = torch.max(sct, dim=-1, keepdim=True)[0]
+        sct = (sct - sct_min) / (sct_max - sct_min)
+
+        evaluated_kwargs['x'] = sct
+        pred = model(**evaluated_kwargs)
+        truth = pos_abs_padded(data, config_dict, device)
+        
+        return pred[truth < 100], truth[truth < 100]
+    
+    def unit_cell_pos_frac_padded(data, config_dict, device):
+        batch_size = torch.max(data.batch) + 1
+        truth = torch.zeros((batch_size, config_dict['Model_config']['out_channels'])).to(device=device)
+        l_idx = 0
+        for i, size in enumerate(data.y['unit_cell_n_atoms']):
+
+            # Extract the unit cell
+            x = data.y['unit_cell_pos_frac'][l_idx : l_idx + size]
+            l_idx += size
+
+            # Sort according to norm
+            norms = torch.norm(x, p = 2, dim = -1)
+            indices = torch.sort(norms, descending=False, dim=0)[1]
+            x = x[indices]
+
+            # Padding
+            padding_size = config_dict['Model_config']['out_channels'] // 3 - x.size(0)
+            if padding_size > 0:
+                padding = torch.full((padding_size, x.size(1)), 100, dtype = x.dtype).to(device=device)
+                x = torch.cat([x, padding], dim = 0)
+
+            # Append
+            truth[i] = x.flatten()
+
+        return truth
+    
+    def unit_cell_pos_frac_from_saxs(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        sct = data.y['saxs'][1::2, :]
+        sct_min = torch.min(sct, dim=-1, keepdim=True)[0]
+        sct_max = torch.max(sct, dim=-1, keepdim=True)[0]
+        sct = (sct - sct_min) / (sct_max - sct_min)
+
+        evaluated_kwargs['x'] = sct
+        pred = model(**evaluated_kwargs)
+        truth = unit_cell_pos_frac_padded(data, config_dict, device)
+        
+        return pred[truth < 100], truth[truth < 100]
+    
+    def unit_cell_pos_frac_from_xrd(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        sct = data.y['xrd'][1::2, :]
+        sct_min = torch.min(sct, dim=-1, keepdim=True)[0]
+        sct_max = torch.max(sct, dim=-1, keepdim=True)[0]
+        sct = (sct - sct_min) / (sct_max - sct_min)
+
+        evaluated_kwargs['x'] = sct
+        pred = model(**evaluated_kwargs)
+        truth = unit_cell_pos_frac_padded(data, config_dict, device)
+        
+        return pred[truth < 100], truth[truth < 100]
+    
+    def unit_cell_pos_frac_from_xPDF(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        sct = data.y['xPDF'][1::2, :]
+        sct_min = torch.min(sct, dim=-1, keepdim=True)[0]
+        sct_max = torch.max(sct, dim=-1, keepdim=True)[0]
+        sct = (sct - sct_min) / (sct_max - sct_min)
+
+        evaluated_kwargs['x'] = sct
+        pred = model(**evaluated_kwargs)
+        truth = unit_cell_pos_frac_padded(data, config_dict, device)
+        
+        return pred[truth < 100], truth[truth < 100]
+
+    def cell_params_from_saxs(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        sct = data.y['saxs'][1::2, :]
+        sct_min = torch.min(sct, dim=-1, keepdim=True)[0]
+        sct_max = torch.max(sct, dim=-1, keepdim=True)[0]
+        sct = (sct - sct_min) / (sct_max - sct_min)
+        
+        evaluated_kwargs['x'] = sct
+        pred = model(**evaluated_kwargs)
+        truth = data.y['cell_params'].reshape(torch.max(data.batch)+1, 6)
+        return pred, truth
+
+    def cell_params_from_xrd(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        sct = data.y['xrd'][1::2, :]
+        sct_min = torch.min(sct, dim=-1, keepdim=True)[0]
+        sct_max = torch.max(sct, dim=-1, keepdim=True)[0]
+        sct = (sct - sct_min) / (sct_max - sct_min)
+        
+        evaluated_kwargs['x'] = sct
+        pred = model(**evaluated_kwargs)
+        truth = data.y['cell_params'].reshape(torch.max(data.batch)+1, 6)
+        return pred, truth
+    
+    def cell_params_from_xPDF(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        sct = data.y['xPDF'][1::2, :]
+        sct_min = torch.min(sct, dim=-1, keepdim=True)[0]
+        sct_max = torch.max(sct, dim=-1, keepdim=True)[0]
+        sct = (sct - sct_min) / (sct_max - sct_min)
+        
+        evaluated_kwargs['x'] = sct
+        pred = model(**evaluated_kwargs)
+        truth = data.y['cell_params'].reshape(torch.max(data.batch)+1, 6)
+        return pred, truth
+
+    def crystal_system_from_saxs(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        sct = data.y['saxs'][1::2, :]
+        sct_min = torch.min(sct, dim=-1, keepdim=True)[0]
+        sct_max = torch.max(sct, dim=-1, keepdim=True)[0]
+        sct = (sct - sct_min) / (sct_max - sct_min)
+        
+        evaluated_kwargs['x'] = sct
+        pred = model(**evaluated_kwargs)
+        truth = torch.tensor(data.y['crystal_system_number'], device=device)
+        return pred, truth
+    
+    def crystal_system_from_xrd(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        sct = data.y['xrd'][1::2, :]
+        sct_min = torch.min(sct, dim=-1, keepdim=True)[0]
+        sct_max = torch.max(sct, dim=-1, keepdim=True)[0]
+        sct = (sct - sct_min) / (sct_max - sct_min)
+        
+        evaluated_kwargs['x'] = sct
+        pred = model(**evaluated_kwargs)
+        truth = torch.tensor(data.y['crystal_system_number'], device=device)
+        return pred, truth
+    
+    def crystal_system_from_xPDF(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        sct = data.y['xPDF'][1::2, :]
+        sct_min = torch.min(sct, dim=-1, keepdim=True)[0]
+        sct_max = torch.max(sct, dim=-1, keepdim=True)[0]
+        sct = (sct - sct_min) / (sct_max - sct_min)
+        
+        evaluated_kwargs['x'] = sct
+        pred = model(**evaluated_kwargs)
+        truth = torch.tensor(data.y['crystal_system_number'], device=device)
+        return pred, truth
+
+    def space_group_from_saxs(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        sct = data.y['saxs'][1::2, :]
+        sct_min = torch.min(sct, dim=-1, keepdim=True)[0]
+        sct_max = torch.max(sct, dim=-1, keepdim=True)[0]
+        sct = (sct - sct_min) / (sct_max - sct_min)
+        
+        evaluated_kwargs['x'] = sct
+        pred = model(**evaluated_kwargs)
+        truth = torch.tensor(data.y['space_group_number'], device=device)
+        return pred, truth
+    
+    def space_group_from_xrd(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        sct = data.y['xrd'][1::2, :]
+        sct_min = torch.min(sct, dim=-1, keepdim=True)[0]
+        sct_max = torch.max(sct, dim=-1, keepdim=True)[0]
+        sct = (sct - sct_min) / (sct_max - sct_min)
+        
+        evaluated_kwargs['x'] = sct
+        pred = model(**evaluated_kwargs)
+        truth = torch.tensor(data.y['space_group_number'], device=device)
+        return pred, truth
+    
+    def space_group_from_xPDF(data, model, secondary, model_kwargs, device, config_dict):
+        evaluated_kwargs = {}
+        for key, value in model_kwargs.items():
+            evaluated_kwargs[key] = eval(value)
+        sct = data.y['xPDF'][1::2, :]
+        sct_min = torch.min(sct, dim=-1, keepdim=True)[0]
+        sct_max = torch.max(sct, dim=-1, keepdim=True)[0]
+        sct = (sct - sct_min) / (sct_max - sct_min)
+        
+        evaluated_kwargs['x'] = sct
+        pred = model(**evaluated_kwargs)
+        truth = torch.tensor(data.y['space_group_number'], device=device)
+        return pred, truth
 
     # Define a dictionary for tasks
-    task_functions = {
+    task_configurations = {
         "AtomClassification": {
             "task_function": atom_classification,
-            "loss_function": nn.CrossEntropyLoss(),
-            "metric_function": MulticlassF1Score(num_classes=118, average='weighted').compute,
-            "metric_name": 'WeightedF1Score',
-            "improved_function": lambda best, new: new > best if best is not None else True,
-        },
-        "SpacegroupClassification": {
-            "task_function": spacegroup_classification,
-            "loss_function": nn.CrossEntropyLoss(),
-            "metric_function": MulticlassF1Score(num_classes=230, average='weighted').compute,
+            "loss_function": lambda x,y: cross_entropy(x, y.long() - 1),
+            "metric_function": lambda x,y: multiclass_f1_score(x, y.long() - 1, num_classes=118, average='weighted'),
             "metric_name": 'WeightedF1Score',
             "improved_function": lambda best, new: new > best if best is not None else True,
         },
         "CrystalSystemClassification": {
             "task_function": crystal_system_classification,
-            "loss_function": nn.CrossEntropyLoss(),
-            "metric_function": MulticlassF1Score(num_classes=7, average='weighted').compute,
+            "loss_function": lambda x,y: cross_entropy(x, y.long() - 1),
+            "metric_function": lambda x,y: multiclass_f1_score(x, y.long() - 1, num_classes=7, average='weighted'),
             "metric_name": 'WeightedF1Score',
             "improved_function": lambda best, new: new > best if best is not None else True,
         },
-        # Add other tasks
+        "SpacegroupClassification": {
+            "task_function": space_group_classification,
+            "loss_function": lambda x,y: cross_entropy(x, y.long() - 1),
+            "metric_function": lambda x,y: multiclass_f1_score(x, y.long() - 1, num_classes=230, average='weighted'),
+            "metric_name": 'WeightedF1Score',
+            "improved_function": lambda best, new: new > best if best is not None else True,
+        },
+        "PositionRegression": {
+            "task_function": pos_abs_regression,
+            "loss_function": nn.SmoothL1Loss(),
+            "metric_function": position_MAE,
+            "metric_name": 'PositionMAE',
+            "improved_function": lambda best, new: new < best if best is not None else True,
+        },
+        "DistanceRegression": {
+            "task_function": edge_attr_regression,
+            "loss_function": nn.SmoothL1Loss(),
+            "metric_function": nn.MSELoss(),
+            "metric_name": 'MSE',
+            "improved_function": lambda best, new: new < best if best is not None else True,
+        },
+        "SAXSRegression": {
+            "task_function": saxs_regression,
+            "loss_function": nn.SmoothL1Loss(),
+            "metric_function": nn.MSELoss(),
+            "metric_name": 'MSE',
+            "improved_function": lambda best, new: new < best if best is not None else True,
+        },
+        "XRDRegression": {
+            "task_function": xrd_regression,
+            "loss_function": nn.SmoothL1Loss(),
+            "metric_function": nn.MSELoss(),
+            "metric_name": 'MSE',
+            "improved_function": lambda best, new: new < best if best is not None else True,
+        },
+        "xPDFRegression": {
+            "task_function": xPDF_regression,
+            "loss_function": nn.SmoothL1Loss(),
+            "metric_function": nn.MSELoss(),
+            "metric_name": 'MSE',
+            "improved_function": lambda best, new: new < best if best is not None else True,
+        },
+        "AbsPositionRegressionSAXS": {
+            "task_function": pos_abs_from_saxs,
+            "loss_function": nn.SmoothL1Loss(),
+            "metric_function": nn.L1Loss(),
+            "metric_name": 'MAE',
+            "improved_function": lambda best, new: new < best if best is not None else True,
+        },
+        "AbsPositionRegressionXRD": {
+            "task_function": pos_abs_from_xrd,
+            "loss_function": nn.SmoothL1Loss(),
+            "metric_function": nn.L1Loss(),
+            "metric_name": 'MAE',
+            "improved_function": lambda best, new: new < best if best is not None else True,
+        },
+        "AbsPositionRegressionxPDF": {
+            "task_function": pos_abs_from_xPDF,
+            "loss_function": nn.SmoothL1Loss(),
+            "metric_function": nn.L1Loss(),
+            "metric_name": 'MAE',
+            "improved_function": lambda best, new: new < best if best is not None else True,
+        },
+        "UnitCellPositionRegressionSAXS": {
+            "task_function": unit_cell_pos_frac_from_saxs,
+            "loss_function": nn.SmoothL1Loss(),
+            "metric_function": nn.L1Loss(),
+            "metric_name": 'MAE',
+            "improved_function": lambda best, new: new < best if best is not None else True,
+        },
+        "UnitCellPositionRegressionXRD": {
+            "task_function": unit_cell_pos_frac_from_xrd,
+            "loss_function": nn.SmoothL1Loss(),
+            "metric_function": nn.L1Loss(),
+            "metric_name": 'MAE',
+            "improved_function": lambda best, new: new < best if best is not None else True,
+        },
+        "UnitCellPositionRegressionxPDF": {
+            "task_function": unit_cell_pos_frac_from_xPDF,
+            "loss_function": nn.SmoothL1Loss(),
+            "metric_function": nn.L1Loss(),
+            "metric_name": 'MAE',
+            "improved_function": lambda best, new: new < best if best is not None else True,
+        },
+        "CellParamsRegressionSAXS": {
+            "task_function": cell_params_from_saxs,
+            "loss_function": nn.SmoothL1Loss(),
+            "metric_function": nn.L1Loss(),
+            "metric_name": 'MAE',
+            "improved_function": lambda best, new: new < best if best is not None else True,
+        },
+        "CellParamsRegressionXRD": {
+            "task_function": cell_params_from_xrd,
+            "loss_function": nn.SmoothL1Loss(),
+            "metric_function": nn.L1Loss(),
+            "metric_name": 'MAE',
+            "improved_function": lambda best, new: new < best if best is not None else True,
+        },
+        "CellParamsRegressionxPDF": {
+            "task_function": cell_params_from_xPDF,
+            "loss_function": nn.SmoothL1Loss(),
+            "metric_function": nn.L1Loss(),
+            "metric_name": 'MAE',
+            "improved_function": lambda best, new: new < best if best is not None else True,
+        },
+        "CrystalSystemClassificationSAXS": {
+            "task_function": crystal_system_from_saxs,
+            "loss_function": lambda x,y: cross_entropy(x, y.long() - 1),
+            "metric_function": lambda x,y: multiclass_f1_score(x, y.long() - 1, num_classes=7, average='weighted'),
+            "metric_name": 'WeightedF1Score',
+            "improved_function": lambda best, new: new > best if best is not None else True,
+        },
+        "CrystalSystemClassificationXRD": {
+            "task_function": crystal_system_from_xrd,
+            "loss_function": lambda x,y: cross_entropy(x, y.long() - 1),
+            "metric_function": lambda x,y: multiclass_f1_score(x, y.long() - 1, num_classes=7, average='weighted'),
+            "metric_name": 'WeightedF1Score',
+            "improved_function": lambda best, new: new > best if best is not None else True,
+        },
+        "CrystalSystemClassificationxPDF": {
+            "task_function": crystal_system_from_xPDF,
+            "loss_function": lambda x,y: cross_entropy(x, y.long() - 1),
+            "metric_function": lambda x,y: multiclass_f1_score(x, y.long() - 1, num_classes=7, average='weighted'),
+            "metric_name": 'WeightedF1Score',
+            "improved_function": lambda best, new: new > best if best is not None else True,
+        },
+        "SpacegroupClassificationSAXS": {
+            "task_function": space_group_from_saxs,
+            "loss_function": lambda x,y: cross_entropy(x, y.long() - 1),
+            "metric_function": lambda x,y: multiclass_f1_score(x, y.long() - 1, num_classes=230, average='weighted'),
+            "metric_name": 'WeightedF1Score',
+            "improved_function": lambda best, new: new > best if best is not None else True,
+        },
+        "SpacegroupClassificationXRD": {
+            "task_function": space_group_from_xrd,
+            "loss_function": lambda x,y: cross_entropy(x, y.long() - 1),
+            "metric_function": lambda x,y: multiclass_f1_score(x, y.long() - 1, num_classes=230, average='weighted'),
+            "metric_name": 'WeightedF1Score',
+            "improved_function": lambda best, new: new > best if best is not None else True,
+        },
+        "SpacegroupClassificationxPDF": {
+            "task_function": space_group_from_xPDF,
+            "loss_function": lambda x,y: cross_entropy(x, y.long() - 1),
+            "metric_function": lambda x,y: multiclass_f1_score(x, y.long() - 1, num_classes=230, average='weighted'),
+            "metric_name": 'WeightedF1Score',
+            "improved_function": lambda best, new: new > best if best is not None else True,
+        },
+        # Add more tasks here...
     }
 
-    # Define atom classification task
-    def atom_classification(data, model, secondary, model_kwargs, device):
-        pred = secondary(model.forward(**model_kwargs))
-        truth = data.x[:,0]
-        return pred, truth
-    
-    # Define space group classification task
-    def space_group_classification(data, model, secondary, model_kwargs, device):
-        pred = secondary(model.forward(**model_kwargs))
-        truth = torch.tensor(data.y['space_group_number'], device=device)
-        return pred, truth
-
-    # Define crystal system classification task
-    def crystal_system_classification(data, model, secondary, model_kwargs, device):
-        pred = secondary(model.forward(**model_kwargs))
-        truth = torch.tensor(data.y['crystal_system_number'], device=device)
-        return pred, truth
-
-    def pos_abs_regression():
-        pass
-
-    def edge_attr_regression():
-        pass
-
-    def saxs_regression():
-        pass
-
-    def xrd_regression():
-        pass
-
-    def xPDF_regression():
-        pass
-
-    def pos_abs_from_saxs():
-        pass
-
-    def pos_abs_from_xrd():
-        pass
-    
-    def pos_abs_from_xPDF():
-        pass
-
-    def unit_cell_pos_frac_from_saxs():
-        pass
-
-    def unit_cell_pos_frac_from_xrd():
-        pass
-
-    def unit_cell_pos_frac_from_xPDF():
-        pass
 
     # Seed loop
-    for seed_idx, seed in enumerate(config['Train_config']['seeds']):
+    for seed_idx, seed in enumerate(config_dict['Train_config']['seeds']):
 
         # Seed
         seed_everything(seed)
         print(f'\nSeed: {seed}\n', flush=True)
 
         # Model config
-        model_configuration = model_configurations.get(config_dict['model'])
+        model_configuration = default_model_configurations.get(config_dict['model'])
         if model_configuration is None:
             raise ValueError("Model not supported")
 
@@ -305,7 +809,7 @@ def run_benchmarking(args):
         secondary = Secondary(**config_dict['Secondary_config']).to(device=device)
 
         # Task configuration
-        task_configuration = task_function.get(config_dict['task'])
+        task_configuration = task_configurations.get(config_dict['task'])
         if task_configuration is None:
             raise NotImplementedError("Task not implemented")
 
@@ -358,7 +862,7 @@ def run_benchmarking(args):
                 data = data.to(device)
 
                 # Perform forward pass
-                pred, truth = task_function(data, model, secondary, model_kwargs, device)
+                pred, truth = task_function(data, model, secondary, model_kwargs, device, config_dict)
                 loss = loss_function(pred, truth)
 
                 # Back prop. loss
@@ -380,7 +884,7 @@ def run_benchmarking(args):
 
                 # Perform forward pass
                 with torch.no_grad():
-                    pred, truth = task_function(data, model, secondary, model_kwargs, device)
+                    pred, truth = task_function(data, model, secondary, model_kwargs, device, config_dict)
                     metric = metric_function(pred, truth)
 
                 # Aggregate errors
@@ -404,11 +908,12 @@ def run_benchmarking(args):
                     f"{save_dir}/best.pt",
                 )
                 best_error = val_error
+                patience = 0
             else:
                 patience += 1
 
             # Save latest model?
-            if config_dict['save_latest']:
+            if config_dict['save_latest_model']:
                 torch.save(
                     {
                         "epoch": epoch + 1,
@@ -428,7 +933,7 @@ def run_benchmarking(args):
             writer.add_scalar(f"{metric_name}/val", val_error, epoch)
 
             # Print checkpoint
-            print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val {metric_name}: {val_f1:.4f}', flush=True)
+            print(f'Epoch: {epoch+1}/{config_dict["Train_config"]["epochs"]}, Train Loss: {train_loss:.4f}, Val {metric_name}: {val_error:.4f}', flush=True)
 
         # Stop time
         stop_time = time.time()
@@ -448,7 +953,7 @@ def run_benchmarking(args):
 
             # Perform forward pass
             with torch.no_grad():
-                pred, truth = task_function(data, model, secondary, model_kwargs, device)
+                pred, truth = task_function(data, model, secondary, model_kwargs, device, config_dict)
                 metric = metric_function(pred, truth)
 
             # Aggregate errors
@@ -479,8 +984,8 @@ def run_benchmarking(args):
             sum(p.numel() for p in model.parameters() if p.requires_grad),
             train_loss,
             metric_name,
-            val_error.detach().cpu().numpy(),
-            test_error.detach().cpu().numpy(),
+            val_error,
+            test_error,
         ]
     
     # Save results to csv file
@@ -488,8 +993,7 @@ def run_benchmarking(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Benchmarking script")
-    parser.add_argument("--config_folder", type=str, help="Path to folder containing configuration files")
-    parser.add_argument("--config_index", type=str, help="Index for cluster array")
+    parser.add_argument("-f", "--config_folder", type=str, help="Path to folder containing configuration files")
+    parser.add_argument("-i", "--config_index", type=str, help="Index for cluster array")
     args = parser.parse_args()
     run_benchmarking(args)
-    

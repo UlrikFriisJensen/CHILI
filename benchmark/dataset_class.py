@@ -33,6 +33,9 @@ class CHILI(Dataset):
             pre_transform (callable, optional): A function/transform to apply to the data before saving.
             pre_filter (callable, optional): A function that takes data and returns True if the data point should be included in the dataset.
         """
+        # Create dataset folder if it does not exists
+        if not os.path.exists(root):
+            os.mkdir(root)
         
         self.dataset = dataset
         self.root = os.path.join(root, self.dataset)
