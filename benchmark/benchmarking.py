@@ -268,6 +268,8 @@ def run_benchmarking(args):
         for key, value in model_kwargs.items():
             evaluated_kwargs[key] = eval(value)
         evaluated_kwargs['x'] = torch.cat((data.x, data.pos_abs), dim=1)
+        evaluated_kwargs['edge_attr'] = None
+        evaluated_kwargs['edge_weight'] = None
         pred = model.forward(**evaluated_kwargs)
         pred = torch.sum(pred[data.edge_index[0, :]] * pred[data.edge_index[1, :]], dim = -1)
         truth = data.edge_attr
