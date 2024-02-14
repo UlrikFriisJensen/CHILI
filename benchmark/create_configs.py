@@ -1,6 +1,5 @@
 # %% Imports
 import os
-
 import yaml
 
 # %% Top level configuration
@@ -15,9 +14,6 @@ models = [
     "GraphUNet",
     "PMLP",
     "MLP",
-    "RandomClass",
-    "MostFrequentClass",
-    "Mean",
 ]
 
 # Path to datasets
@@ -30,7 +26,7 @@ stratify_on = ["Crystal system (Number)", None]
 stratify_distribution = ["equal", None]
 
 # Directory to save results in
-save_dir = "results_final"
+save_dir = "results"
 
 # tasks to test
 classification_tasks = [
@@ -72,19 +68,16 @@ p2p_regression_tasks = [
 ]
 
 prediction_tasks = classification_tasks + regression_tasks
-generative_tasks = (
-    generative_position_tasks + p2p_classification_tasks + p2p_regression_tasks
-)
-
+generative_tasks = generative_position_tasks + p2p_classification_tasks + p2p_regression_tasks
 tasks = prediction_tasks + generative_tasks
 
 # %% Training configuration
 
 learning_rate = 0.001
 batch_size = 16
-max_epochs = 1000
+max_epochs = 1
 training_time_seconds = 3600
-seeds = [42, 43, 44]
+seeds = [42]#, 43, 44]
 max_patience = 50  # Epochs
 save_latest_model = False
 
@@ -131,30 +124,11 @@ for dataset_name, strategy, on, distribution in zip(
             if (model != "MLP") and (task in generative_tasks):
                 continue
 
-            # RandomClass
-            if model == "RandomClass":
-                if task in generative_tasks:
-                    continue
-                elif task not in classification_tasks:
-                    continue
-
-            # MostFrequentClass
-            if model == "MostFrequentClass":
-                if task in generative_tasks:
-                    continue
-                elif task not in classification_tasks:
-                    continue
-
-            # Mean
-            if model == "Mean":
-                if task in classification_tasks:
-                    continue
-                elif task in p2p_classification_tasks:
-                    continue
-
             if task == "AtomClassification":
                 input_channels = 3
                 output_channels = 118
+                num_classes = 118
+                most_frequent_class = 8 # Oxygen
             elif task == "PositionRegression":
                 input_channels = 4
                 output_channels = 3
@@ -206,11 +180,17 @@ for dataset_name, strategy, on, distribution in zip(
             else:
                 input_channels = 7
                 output_channels = 64
+                num_classes = None
+                most_frequent_class = None
 
             if task == "SpacegroupClassification":
                 sec_output_channels = 230
+                num_classes = 230
+                most_frequent_class = 225
             elif task == "CrystalSystemClassification":
                 sec_output_channels = 7
+                num_classes = 7
+                most_frequent_class = 7
             elif task == "SAXSRegression":
                 sec_output_channels = 300
             elif task == "XRDRegression":
@@ -252,6 +232,8 @@ for dataset_name, strategy, on, distribution in zip(
                     "split_strategy": strategy,
                     "stratify_on": on,
                     "stratify_distribution": distribution,
+                    "most_frequent_class": most_frequent_class,
+                    "num_classes": num_classes,
                 },
             }
 
