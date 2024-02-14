@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# ## Distance Regression with CHILI-3K using GCN model
+
+# ### Imports
+
 import warnings
 import torch
 import torch.nn as nn
@@ -8,19 +12,27 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn.models import GCN
 from benchmark.dataset_class import CHILI
 
+
+# ### Model Setup
+
 # Hyperparamters
 learning_rate = 0.001
 batch_size = 16
-max_epochs = 50
+max_epochs = 10
 seeds = 42
 max_patience = 50  # Epochs
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Setup
+# Model and Optimizer
+model = GCN(in_channels = 7, hidden_channels = 32, out_channels = 1, num_layers = 4).to(device=device)
+optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
+
+
+# ### Dataset Module
+
+# Create dataset
 root = 'benchmark/dataset/'
 dataset='CHILI-3K'
-
-# Create dataset using the CHILI dataset from this repo
 dataset = CHILI(root, dataset)
 
 # Create random split and load that into the dataset class
@@ -28,8 +40,8 @@ with warnings.catch_warnings():
     warnings.simplefilter('ignore')
     dataset.create_data_split(split_strategy = 'random', test_size=0.1)
     dataset.load_data_split(split_strategy = 'random')
-
-# Define dataloader
+    
+# Define dataloaders
 train_loader = DataLoader(dataset.train_set, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(dataset.validation_set, batch_size=batch_size, shuffle=False)
 test_loader = DataLoader(dataset.test_set, batch_size=batch_size, shuffle=False)
@@ -37,20 +49,9 @@ test_loader = DataLoader(dataset.test_set, batch_size=batch_size, shuffle=False)
 print(f"Number of training samples: {len(dataset.train_set)}", flush=True)
 print(f"Number of validation samples: {len(dataset.validation_set)}", flush=True)
 print(f"Number of test samples: {len(dataset.test_set)}", flush=True)
-print()
 
-# Intialise model and optimizer
-model = GCN(
-    in_channels = 7,
-    hidden_channels = 32,
-    out_channels = 1,
-    num_layers = 4,
-).to(device=device)
 
-optimizer = torch.optim.Adam(
-    model.parameters(),
-    lr = learning_rate,
-)
+# ### Train, validate and test
 
 # Initialise loss function and metric function
 loss_function = nn.SmoothL1Loss()
@@ -94,7 +95,7 @@ for epoch in range(max_epochs):
 
         train_loss += loss.item()
     
-    # Train loss
+    # Training loss
     train_loss = train_loss / len(train_loader)
 
     # Validation loop
@@ -130,9 +131,9 @@ for epoch in range(max_epochs):
         patience += 1
 
     # Print checkpoint
-    print(f'Epoch: {epoch+1}/{max_epochs}, Train Loss: {train_loss:.4f}, Val WeightedF1Score: {val_error:.4f}')
+    print(f'Epoch: {epoch+1}/{max_epochs}, Train Loss: {train_loss:.4f}, Val MSE: {val_error:.4f}')
 
-# Testing
+# Testing loop
 model.eval()
 test_error = 0
 for data in test_loader:
@@ -158,4 +159,4 @@ for data in test_loader:
 
 # Final test error
 test_error = test_error / len(test_loader)
-print(f"Test WeightedF1Score: {test_error:.4f}")
+print(f"Test MSE: {test_error:.4f}")
