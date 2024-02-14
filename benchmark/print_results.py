@@ -64,12 +64,12 @@ def main(results_dir, fstring_format=".3f"):
                 "MostFrequentClass",
                 "Mean",
                 "GCN",
+                "PMLP",
                 "GraphSAGE",
                 "GAT",
+                "GraphUNet",
                 "GIN",
                 "EdgeCNN",
-                "GraphUNet",
-                "PMLP",
             ]
         )
     )
@@ -86,7 +86,7 @@ def main(results_dir, fstring_format=".3f"):
         "xPDFRegression",
     ]
     # Row order from least to most trainable parameters
-    # row_order = ['RandomClass', 'MostFrequentClass', 'Mean', 'GCN', 'PMLP', 'GraphSAGE', 'GAT', 'GraphUNet', 'GIN', 'EdgeCNN'] # TODO: Can't figure out how to sort rows in double indexed pivot table
+    # row_order = ['RandomClass', 'MostFrequentClass', 'Mean', 'GCN', 'PMLP', 'GraphSAGE', 'GAT', 'GraphUNet', 'GIN', 'EdgeCNN']
 
     # Create and save the LaTeX table
     property_df.pivot_table(
