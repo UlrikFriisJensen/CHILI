@@ -208,7 +208,7 @@ if __name__ == "__main__":
     # included_atoms = args.include
     # excluded_atoms = args.exclude
 
-    cif_folder = "../Dataset/CIFs/COD_subset/"
+    cif_folder = "../benchmark/dataset/CIFs/CHILI-100K/"
     id_file = "./COD_subset_IDs.csv"
 
     # Get CIF IDs

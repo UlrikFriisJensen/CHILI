@@ -960,7 +960,7 @@ def plot_nElements_chili100k(
 # %% Main
 if __name__ == "__main__":
     # Setup
-    root = "../Dataset/"
+    root = "../benchmark/dataset/"
 
     print("Loading datasets...\n\n")
     # Load datasets

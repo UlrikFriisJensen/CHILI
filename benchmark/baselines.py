@@ -1,4 +1,4 @@
-from typing import Optional, Callable, List, Union
+from typing import Optional
 import argparse
 import torch
 import torch.nn as nn
@@ -8,7 +8,6 @@ from torch_geometric.seed import seed_everything
 from torcheval.metrics.functional import multiclass_f1_score
 import numpy as np
 from dataset_class import CHILI
-import logging
 
 def run_baselines(root: str,
                   dataset: str,

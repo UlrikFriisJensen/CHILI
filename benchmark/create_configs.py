@@ -18,7 +18,7 @@ models = [
 
 # Path to datasets
 dataset_dir = "dataset"
-dataset_names = ["CHILI-COD", "CHILI-SIM"]
+dataset_names = ["CHILI-3K", "CHILI-100K"]
 
 # Data distribution
 split_strategy = ["stratified", "random"]

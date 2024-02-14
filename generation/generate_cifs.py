@@ -44,7 +44,7 @@ def main(args):
         required_atoms=required_atoms,
         optional_atoms=optional_atoms,
         from_table_values=False,
-        save_folder=datasetPath + "/CIFs/SimulatedFull/",
+        save_folder=datasetPath + "/CIFs/CHILI-3K/",
     )
 
 
