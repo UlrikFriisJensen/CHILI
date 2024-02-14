@@ -7,7 +7,7 @@ Ulrik Friis-Jensen $^{1,2,†}$, Frederik L. Johansen $^{1,2,†}$, Andy S. Anke
 
 3: Department of Energy Conversion and Storage, Technical University of Denmark, Denmark
 
-4: University of Oxford, United Kingdom
+4: Department of Chemistry, University of Oxford, United Kingdom
 
 † Both authors contributed equally to this research.
 
@@ -20,3 +20,8 @@ In addition, the bulk of existing graph ML focuses on characterising molecules a
 
 In this work, we invite the graph ML community to address these open challenges by presenting two new chemically-informed large-scale inorganic (`CHILI`) nanomaterials datasets.  These datasets contain nanomaterials of different scales and properties represented as graphs of varying sizes. The first dataset is a medium-scale dataset (with overall >6M nodes, >49M edges) of mono-metallic oxide nanomaterials generated from 12 selected crystal types (`CHILI-3K`). This dataset has a narrower chemical scope focused on an interesting part of chemical space with a lot of active research. The second is a large-scale dataset (with overall >183M nodes, >1.2B edges) of nanomaterials generated from experimentally determined crystal structures (`CHILI-100K`). The crystal structures used in `CHILI-100K` are obtained from a curated subset from the Crystallography Open Database (COD) and has a broader chemical scope covering database entries for 68 metals and 11 non-metals. We define 11 property prediction tasks covering node-, edge-, and graph- level tasks that span classification and regression. In addition we also define structure prediction tasks, which are of special interest for nanomaterial research. We benchmark the performance of a wide array of baseline methods starting with simple baselines to multiple off-the-shelf graph neural networks. 
 Based on these benchmarking results, we highlight areas which need future work to achieve useful performance for applications in (nano)materials chemistry. To the best of our knowledge, `CHILI-3K` and `CHILI-100K` are the first open-source nanomaterial datasets of this scale -- both on the individual graph level and of the dataset as a whole -- and the only nanomaterials datasets with high structural and elemental diversity.
+
+## Data access
+The `CHILI` datasets can be accessed using the provided dataset class, which can be found [here](https://github.com/UlrikFriisJensen/CHILI/blob/main/benchmark/dataset_class.py). The dataset class will automatically download and correctly unpack the data into `.pt` files containing PyTorch Geometric Data objects. 
+
+The raw data is stored in `.h5` files, with each file containing all 5 sizes of nanoparticles generated from the same crystalline material. Click on the following hyperlinks to download the raw data for [`CHILI-3K`](https://sid.erda.dk/share_redirect/h6ktCBGzPF/CHILI-3K.zip) and [`CHILI-100K`](https://sid.erda.dk/share_redirect/h6ktCBGzPF/CHILI-100K.zip).
