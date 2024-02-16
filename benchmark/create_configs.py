@@ -76,7 +76,7 @@ tasks = prediction_tasks + generative_tasks
 
 learning_rate = 0.001
 batch_size = 16
-max_epochs = 1
+max_epochs = 1000
 training_time_seconds = 3600
 seeds = [42, 43, 44]
 max_patience = 50  # Epochs
