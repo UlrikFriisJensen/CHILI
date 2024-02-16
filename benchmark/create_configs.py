@@ -27,7 +27,7 @@ stratify_distribution = ["equal", None]
 n_samples_per_class = [425, 'max']
 
 # Directory to save results in
-save_dir = "results"
+save_dir = "results_n_samples_per_class_425"
 
 # tasks to test
 classification_tasks = [
@@ -88,8 +88,8 @@ if not os.path.exists(config_dir):
     os.mkdir(config_dir)
 
 # %% Create config files
-for dataset_name, strategy, on, distribution in zip(
-    dataset_names, split_strategy, stratify_on, stratify_distribution
+for dataset_name, strategy, on, distribution, n_samples in zip(
+    dataset_names, split_strategy, stratify_on, stratify_distribution, n_samples_per_class
 ):
     config_dataset_dir = os.path.join(config_dir, dataset_name)
     if not os.path.exists(config_dataset_dir):
@@ -233,7 +233,7 @@ for dataset_name, strategy, on, distribution in zip(
                     "split_strategy": strategy,
                     "stratify_on": on,
                     "stratify_distribution": distribution,
-                    "n_samples_per_class": n_samples_per_class,
+                    "n_samples_per_class": n_samples,
                     "most_frequent_class": most_frequent_class,
                     "num_classes": num_classes,
                 },

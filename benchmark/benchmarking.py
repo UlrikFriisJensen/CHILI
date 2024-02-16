@@ -53,7 +53,7 @@ def run_benchmarking(args):
             split_strategy = config_dict["Data_config"]["split_strategy"],
             stratify_on = config_dict["Data_config"]["stratify_on"],
             stratify_distribution = config_dict["Data_config"]["stratify_distribution"],
-            n_sample_per_class = config_dict["Data_config"]["n_samples_per_class"],
+            n_samples_per_class = config_dict["Data_config"]["n_samples_per_class"],
             test_size=0.1,
         )
         dataset.load_data_split(
