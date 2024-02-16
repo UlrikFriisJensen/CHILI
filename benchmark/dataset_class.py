@@ -326,7 +326,7 @@ class CHILI(Dataset):
         split_strategy: str = "random",
         stratify_on: str ="Space group (Number)",
         stratify_distribution: str = "match",
-        n_sample_per_class: str = "max",
+        n_samples_per_class: str = "max",
         random_state: int = 42,
         return_idx: bool = False,
     ) -> Optional[Union[List[int], None]]:
@@ -339,7 +339,7 @@ class CHILI(Dataset):
             split_strategy (str, optional): Split strategy. Defaults to "random".
             stratify_on (str, optional): Feature to stratify on. Defaults to "Space group (Number)".
             stratify_distribution (str, optional): Distribution of stratification. Defaults to "match".
-            n_sample_per_class (str or int, optional): Number of samples per class. Defaults to "max".
+            n_samples_per_class (str or int, optional): Number of samples per class. Defaults to "max".
             random_state (int, optional): Random state for reproducibility. Defaults to 42.
             return_idx (bool, optional): Whether to return indices. Defaults to False.
         """
@@ -433,14 +433,14 @@ class CHILI(Dataset):
 
             elif stratify_distribution == "equal":
 
-                if n_sample_per_class == "max":
+                if n_samples_per_class == "max":
                     # Find the class with the least number of samples
                     min_samples = df_stats[stratify_on].value_counts().min()
-                elif isinstance(n_sample_per_class, int):
-                    min_samples = n_sample_per_class
+                elif isinstance(n_samples_per_class, int):
+                    min_samples = n_samples_per_class
                 else:
                     raise ValueError(
-                        'n_sample_per_class not recognized. Please use either "max" or an integer'
+                        'n_samples_per_class not recognized. Please use either "max" or an integer'
                     )
                 # Randomly sample the same number of samples from each class
                 subset_idx = []

@@ -24,6 +24,7 @@ dataset_names = ["CHILI-100K", "CHILI-3K"]
 split_strategy = ["stratified", "random"]
 stratify_on = ["Crystal system (Number)", None]
 stratify_distribution = ["equal", None]
+n_samples_per_class = [425, 'max']
 
 # Directory to save results in
 save_dir = "results"
@@ -232,6 +233,7 @@ for dataset_name, strategy, on, distribution in zip(
                     "split_strategy": strategy,
                     "stratify_on": on,
                     "stratify_distribution": distribution,
+                    "n_samples_per_class": n_samples_per_class,
                     "most_frequent_class": most_frequent_class,
                     "num_classes": num_classes,
                 },
