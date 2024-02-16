@@ -18,7 +18,7 @@ models = [
 
 # Path to datasets
 dataset_dir = "dataset"
-dataset_names = ["CHILI-3K", "CHILI-100K"]
+dataset_names = ["CHILI-100K", "CHILI-3K"]
 
 # Data distribution
 split_strategy = ["stratified", "random"]
@@ -77,7 +77,7 @@ learning_rate = 0.001
 batch_size = 16
 max_epochs = 1
 training_time_seconds = 3600
-seeds = [42]#, 43, 44]
+seeds = [42, 43, 44]
 max_patience = 50  # Epochs
 save_latest_model = False
 
