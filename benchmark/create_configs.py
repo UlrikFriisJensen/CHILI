@@ -18,15 +18,16 @@ models = [
 
 # Path to datasets
 dataset_dir = "dataset"
-dataset_names = ["CHILI-3K", "CHILI-100K"]
+dataset_names = ["CHILI-100K", "CHILI-3K"]
 
 # Data distribution
 split_strategy = ["stratified", "random"]
 stratify_on = ["Crystal system (Number)", None]
 stratify_distribution = ["equal", None]
+n_samples_per_class = [425, 'max']
 
 # Directory to save results in
-save_dir = "results"
+save_dir = "results_n_samples_per_class_425"
 
 # tasks to test
 classification_tasks = [
@@ -75,9 +76,9 @@ tasks = prediction_tasks + generative_tasks
 
 learning_rate = 0.001
 batch_size = 16
-max_epochs = 1
+max_epochs = 1000
 training_time_seconds = 3600
-seeds = [42]#, 43, 44]
+seeds = [42, 43, 44]
 max_patience = 50  # Epochs
 save_latest_model = False
 
@@ -87,8 +88,8 @@ if not os.path.exists(config_dir):
     os.mkdir(config_dir)
 
 # %% Create config files
-for dataset_name, strategy, on, distribution in zip(
-    dataset_names, split_strategy, stratify_on, stratify_distribution
+for dataset_name, strategy, on, distribution, n_samples in zip(
+    dataset_names, split_strategy, stratify_on, stratify_distribution, n_samples_per_class
 ):
     config_dataset_dir = os.path.join(config_dir, dataset_name)
     if not os.path.exists(config_dataset_dir):
@@ -232,6 +233,7 @@ for dataset_name, strategy, on, distribution in zip(
                     "split_strategy": strategy,
                     "stratify_on": on,
                     "stratify_distribution": distribution,
+                    "n_samples_per_class": n_samples,
                     "most_frequent_class": most_frequent_class,
                     "num_classes": num_classes,
                 },

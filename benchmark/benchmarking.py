@@ -53,6 +53,7 @@ def run_benchmarking(args):
             split_strategy = config_dict["Data_config"]["split_strategy"],
             stratify_on = config_dict["Data_config"]["stratify_on"],
             stratify_distribution = config_dict["Data_config"]["stratify_distribution"],
+            n_samples_per_class = config_dict["Data_config"]["n_samples_per_class"],
             test_size=0.1,
         )
         dataset.load_data_split(
@@ -265,8 +266,10 @@ def run_benchmarking(args):
         for key, value in model_kwargs.items():
             evaluated_kwargs[key] = eval(value)
         evaluated_kwargs['x'] = torch.cat((data.x, data.pos_abs), dim=1)
-        evaluated_kwargs['edge_attr'] = None
-        evaluated_kwargs['edge_weight'] = None
+        if 'edge_attr' in evaluated_kwargs.keys():
+            evaluated_kwargs['edge_attr'] = None
+        if 'edge_weight' in evaluated_kwargs.keys():
+            evaluated_kwargs['edge_weight'] = None
         pred = model.forward(**evaluated_kwargs)
         pred = torch.sum(pred[data.edge_index[0, :]] * pred[data.edge_index[1, :]], dim = -1)
         truth = data.edge_attr
