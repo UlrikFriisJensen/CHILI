@@ -14,8 +14,8 @@ class custom_float_aggfunc():
         self.fstring_format = fstring_format
     
     def __call__(self, x):
-        if x.std() > 0.00001:
-            return rf"${x.mean():{self.fstring_format}} \pm {x.std():{self.fstring_format}}$"
+        if not pd.isnull(x.std()): # x.std() > 0.00001
+            return rf"${x.mean():{self.fstring_format}} \pm $ \tiny{'{'}{x.std():{self.fstring_format}}{'}'}"
         else:
             return rf"${x.mean():{self.fstring_format}}$"
 
