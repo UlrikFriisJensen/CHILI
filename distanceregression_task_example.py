@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# ## Distance Regression with CHILI-3K using GCN model
+# %% Distance Regression with CHILI-3K using GCN model
 
-# ### Imports
+# %% Imports
 
 import warnings
 import torch
@@ -12,8 +12,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn.models import GCN
 from benchmark.dataset_class import CHILI
 
-
-# ### Model Setup
+# %% Model Setup
 
 # Hyperparamters
 learning_rate = 0.001
@@ -27,13 +26,14 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = GCN(in_channels = 7, hidden_channels = 32, out_channels = 1, num_layers = 4).to(device=device)
 optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
 
-
-# ### Dataset Module
+# %% Dataset Module
 
 # Create dataset
 root = 'benchmark/dataset/'
 dataset='CHILI-3K'
 dataset = CHILI(root, dataset)
+
+print(f'Running DistanceRegression example on {dataset}\n', flush=True)
 
 # Create random split and load that into the dataset class
 with warnings.catch_warnings():
@@ -48,10 +48,9 @@ test_loader = DataLoader(dataset.test_set, batch_size=batch_size, shuffle=False)
 
 print(f"Number of training samples: {len(dataset.train_set)}", flush=True)
 print(f"Number of validation samples: {len(dataset.validation_set)}", flush=True)
-print(f"Number of test samples: {len(dataset.test_set)}", flush=True)
+print(f"Number of test samples: {len(dataset.test_set)}\n", flush=True)
 
-
-# ### Train, validate and test
+# %% Train, validate and test
 
 # Initialise loss function and metric function
 loss_function = nn.SmoothL1Loss()
