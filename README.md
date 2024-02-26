@@ -1,3 +1,5 @@
+[![arXiv](https://img.shields.io/badge/arXiv-2402.13221-blue.svg)](https://arxiv.org/abs/2402.13221)
+
 # CHILI: Chemically-Informed Large-scale Inorganic Nanomaterials Dataset for Advancing Graph Machine Learning
 Ulrik Friis-Jensen $^{1,2,†}$, Frederik L. Johansen $^{1,2,†}$, Andy S. Anker $^{3,4}$, Erik B. Dam $^{2}$, Kirsten M. Ø. Jensen $^{1}$, Raghavendra Selvan $^{2}$
 
@@ -41,3 +43,15 @@ We have provided an example in this [Python file](https://github.com/UlrikFriisJ
 
 ## Direct download
 Click on the following hyperlinks to directly download the raw data for [`CHILI-3K`](https://sid.erda.dk/share_redirect/h6ktCBGzPF/CHILI-3K.zip) and [`CHILI-100K`](https://sid.erda.dk/share_redirect/h6ktCBGzPF/CHILI-100K.zip).
+
+## Cite
+Kindly cite our publication if you use the dataset or any part of the code:
+```
+@misc{friisjensen2024chili,
+      title={CHILI: Chemically-Informed Large-scale Inorganic Nanomaterials Dataset for Advancing Graph Machine Learning}, 
+      author={Ulrik Friis-Jensen and Frederik L. Johansen and Andy S. Anker and Erik B. Dam and Kirsten M. Ø. Jensen and Raghavendra Selvan},
+      year={2024},
+      month={February},
+      note={arXiv preprint arXiv:2402.13221]
+}
+```
