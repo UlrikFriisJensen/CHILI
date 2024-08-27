@@ -1,3 +1,4 @@
+[![DOI](https://img.shields.io/badge/DOI-10.1145%2F3637528.3671538-green)](https://dl.acm.org/doi/10.1145/3637528.3671538)
 [![arXiv](https://img.shields.io/badge/arXiv-2402.13221-blue.svg)](https://arxiv.org/abs/2402.13221)
 
 # CHILI: Chemically-Informed Large-scale Inorganic Nanomaterials Dataset for Advancing Graph Machine Learning
