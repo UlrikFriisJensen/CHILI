@@ -1,6 +1,7 @@
-![KDD'24](https://img.shields.io/badge/DOI-KDD'24%20Proceedings-brightgreen?color=%231f77b4&link=https%3A%2F%2Fdl.acm.org%2Fdoi%2F10.1145%2F3637528.3671538)
-![DATA](https://img.shields.io/badge/DOI-data-brightgreen?color=%23ff0000&link=https%3A%2F%2Fdoi.org%2F10.17894%2Fucph.e37b6615-8635-49cf-819d-eae60e781a96)
+[![KDD'24](https://img.shields.io/badge/DOI-KDD'24%20Proceedings-brightgreen?color=%231f77b4&link=https%3A%2F%2Fdl.acm.org%2Fdoi%2F10.1145%2F3637528.3671538)](https://doi.org/10.1145/3637528.3671538)
+[![DATA](https://img.shields.io/badge/DOI-data-brightgreen?color=%23ff0000&link=https%3A%2F%2Fdoi.org%2F10.17894%2Fucph.e37b6615-8635-49cf-819d-eae60e781a96)](https://doi.org/10.17894/ucph.e37b6615-8635-49cf-819d-eae60e781a96)
 [![arXiv](https://img.shields.io/badge/arXiv-2402.13221-blue.svg)](https://arxiv.org/abs/2402.13221)
+
 
 # CHILI🌶️ 
 ## Chemically-Informed Large-scale Inorganic Nanomaterials Dataset for Advancing Graph Machine Learning
