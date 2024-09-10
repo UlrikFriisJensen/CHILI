@@ -1,17 +1,16 @@
-[![DOI](https://img.shields.io/badge/DOI-10.1145%2F3637528.3671538-green)](https://dl.acm.org/doi/10.1145/3637528.3671538)
+![KDD'24](https://img.shields.io/badge/DOI-KDD'24%20Proceedings-brightgreen?color=%231f77b4&link=https%3A%2F%2Fdl.acm.org%2Fdoi%2F10.1145%2F3637528.3671538)
+![DATA](https://img.shields.io/badge/DOI-data-brightgreen?color=%23ff0000&link=https%3A%2F%2Fdoi.org%2F10.17894%2Fucph.e37b6615-8635-49cf-819d-eae60e781a96)
 [![arXiv](https://img.shields.io/badge/arXiv-2402.13221-blue.svg)](https://arxiv.org/abs/2402.13221)
 
-# CHILI: Chemically-Informed Large-scale Inorganic Nanomaterials Dataset for Advancing Graph Machine Learning
-Ulrik Friis-Jensen $^{1,2,†}$, Frederik L. Johansen $^{1,2,†}$, Andy S. Anker $^{3,4}$, Erik B. Dam $^{2}$, Kirsten M. Ø. Jensen $^{1}$, Raghavendra Selvan $^{2}$
+# CHILI🌶️ 
+## Chemically-Informed Large-scale Inorganic Nanomaterials Dataset for Advancing Graph Machine Learning
 
-1: Department of Chemistry, University of Copenhagen, Denmark
+#### Ulrik Friis-Jensen $^{1,2,†}$, Frederik L. Johansen $^{1,2,†}$, Andy S. Anker $^{3,4}$, Erik B. Dam $^{2}$, Kirsten M. Ø. Jensen $^{1}$, Raghavendra Selvan $^{2}$
 
-2: Department of Computer Science, University of Copenhagen, Denmark
-
-3: Department of Energy Conversion and Storage, Technical University of Denmark, Denmark
-
-4: Department of Chemistry, University of Oxford, United Kingdom
-
+1: Department of Chemistry, University of Copenhagen, Denmark <br>
+2: Department of Computer Science, University of Copenhagen, Denmark <br>
+3: Department of Energy Conversion and Storage, Technical University of Denmark, Denmark <br>
+4: Department of Chemistry, University of Oxford, United Kingdom <br>
 † Both authors contributed equally to this research.
 
 ### Abstract
@@ -43,16 +42,24 @@ will automatically download and correctly unpack the `CHILI-3K` dataset into `.p
 We have provided an example in this [Python file](https://github.com/UlrikFriisJensen/CHILI/blob/main/distanceregression_example.py) as well as this [Jupyter Notebook](https://github.com/UlrikFriisJensen/CHILI/blob/main/distanceregression_example_notebook.ipynb) with more details on how to use the `CHILI` dataset class to train a basic GCN model on distance regression.
 
 ## Direct download
-Click on the following hyperlinks to directly download the raw data for [`CHILI-3K`](https://sid.erda.dk/share_redirect/h6ktCBGzPF/CHILI-3K.zip) and [`CHILI-100K`](https://sid.erda.dk/share_redirect/h6ktCBGzPF/CHILI-100K.zip).
+Click on the following hyperlinks to directly download the raw data for [`CHILI-3K`](https://doi.org/10.17894/ucph.e37b6615-8635-49cf-819d-eae60e781a96) and [`CHILI-100K`](https://doi.org/10.17894/ucph.e37b6615-8635-49cf-819d-eae60e781a96).
 
 ## Cite
 Kindly cite our publication if you use the dataset or any part of the code:
 ```
-@misc{friisjensen2024chili,
-      title={CHILI: Chemically-Informed Large-scale Inorganic Nanomaterials Dataset for Advancing Graph Machine Learning}, 
-      author={Ulrik Friis-Jensen and Frederik L. Johansen and Andy S. Anker and Erik B. Dam and Kirsten M. Ø. Jensen and Raghavendra Selvan},
-      year={2024},
-      month={February},
-      note={arXiv preprint arXiv:2402.13221]
+@inproceedings{10.1145/3637528.3671538,
+author = {Friis-Jensen, Ulrik and Johansen, Frederik L. and Anker, Andy S. and Dam, Erik B. and Jensen, Kirsten M. \O{}. and Selvan, Raghavendra},
+title = {CHILI: Chemically-Informed Large-scale Inorganic Nanomaterials Dataset for Advancing Graph Machine Learning},
+year = {2024},
+isbn = {9798400704901},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3637528.3671538},
+doi = {10.1145/3637528.3671538},
+pages = {4962–4973},
+numpages = {12},
+keywords = {atomic structure, chemistry, datasets, deep learning, graph neural network, graphs, machine learning, nanomaterials, neutron, scattering, x-ray},
+location = {Barcelona, Spain},
+series = {KDD '24}
 }
 ```
